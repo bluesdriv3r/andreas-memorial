@@ -1,0 +1,87 @@
+# MkDocs build for the two pages (guest upload and admin download), using the Material
+# theme. Colors come from web/stylesheets/colors.css.
+#
+# Title and footer are injected by publish.sh from `terraform output`, so no names
+# live in git. Unset, they fall back to neutral values for local builds.
+site_name: !ENV [EVENT_TITLE, 'Erinnerungen teilen']
+copyright: !ENV [FOOTER_TEXT, '']
+site_url: !ENV [SITE_URL, '']
+
+docs_dir: web
+site_dir: site
+
+theme:
+  name: material
+  language: de
+  # No Google Fonts: Material would otherwise load Roboto from Google's servers, which
+  # sends every guest's IP address to Google (a GDPR issue in the EU). The same fonts are
+  # self-hosted instead — web/fonts/ and stylesheets/fonts.css — so the look is unchanged.
+  font: false
+  # Spock's hand, after the quotation under the portrait. Material ships the Font Awesome
+  # icon set, so the header logo needs no file of its own.
+  icon:
+    logo: fontawesome/solid/hand-spock
+  # The same Font Awesome icon (CC BY 4.0) in the link color, legible on light and dark
+  # browser tab bars alike.
+  favicon: images/favicon.svg
+  # Dark mode is switched off for now: many guests will open the page at night, and the
+  # light design reads better there. With a single palette Material shows no toggle.
+  # web/javascripts/light-only.js resets a dark choice a browser stored earlier.
+  #
+  # To switch it back on: delete the single entry below, uncomment the two-entry block,
+  # and remove light-only.js from extra_javascript. colors.css still carries the dark
+  # (slate) tokens, so nothing else changes.
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+  # palette:
+  #   # Follows the OS setting by default; the header toggle overrides it.
+  #   - media: "(prefers-color-scheme: light)"
+  #     scheme: default
+  #     primary: custom
+  #     accent: custom
+  #     toggle:
+  #       icon: material/weather-sunny
+  #       name: Dunkles Design
+  #   - media: "(prefers-color-scheme: dark)"
+  #     scheme: slate
+  #     primary: custom
+  #     accent: custom
+  #     toggle:
+  #       icon: material/weather-night
+  #       name: Helles Design
+
+# No search: two self-contained pages.
+plugins: []
+
+nav:
+  - index.md
+
+# The admin page is reached by URL only; guests get no link to it.
+not_in_nav: |
+  /admin/index.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.highlight
+  - pymdownx.superfences
+  # Material's icon index as inline SVG (QR button icon).
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  # Hides the "Made with Material for MkDocs" line so the footer shows only `copyright`.
+  generator: false
+
+extra_css:
+  # First, so the theme picks the self-hosted fonts up before anything else renders.
+  - stylesheets/fonts.css
+  - stylesheets/colors.css
+  - stylesheets/memorial.css
+
+extra_javascript:
+  - javascripts/light-only.js

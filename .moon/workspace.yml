@@ -1,0 +1,6 @@
+$schema: 'https://moonrepo.dev/schemas/workspace.json'
+
+# A single project rooted here. Moon is optional: every task is a plain script or
+# command, listed in README.md.
+projects:
+  memorial: '.'

@@ -1,0 +1,23 @@
+# Local tooling.
+.venv/
+node_modules/
+.moon/cache/
+.DS_Store
+
+# MkDocs build output.
+site/
+
+# Terraform: state holds resource IDs; tfvars hold the credential digest, the event
+# title and the footer text (names stay out of git). Tracked: *.tf, admin-auth.js,
+# .terraform.lock.hcl.
+terraform/.terraform/
+terraform/.build/
+terraform/*.tfvars
+terraform/*.tfstate
+terraform/*.tfstate.*
+
+# Deployment-specific images, added before publishing (README "Deploying") rather than
+# committed: the QR code encodes this deployment's CloudFront address, and the portrait
+# is a personal photo, kept out of git like the names in terraform.tfvars.
+web/images/qr.png
+web/images/portrait.jpg

@@ -1,0 +1,387 @@
+/* ==========================================================================
+   Color system — the single source of every color on both pages.
+
+   Nothing here was picked by eye. Every value is produced by three rules:
+
+     1. HUE        h_i = (132.109 + i * 137.508) mod 360   [137.508 = 360/phi^2]
+                   seeded at the lime-950 anchor; step 1 is snapped onto the
+                   blue-950 anchor (ideal 269.617, anchor 267.935, delta 1.68).
+     2. CHROMA     one of three levels, clamped to the sRGB gamut.
+     3. LIGHTNESS  solved numerically so the token meets its role's WCAG
+                   contrast target against its own background.
+
+   Each token is declared twice: an sRGB hex first (fallback for browsers
+   without oklch()), then the authoritative oklch(). The comment above each
+   pair records its derivation and the measured contrast ratio.
+
+   To extend the palette, re-run the rules — do not retouch a value by hand.
+   Layer 3 maps the tokens onto Material for MkDocs' own CSS variables.
+   ========================================================================== */
+
+/* --- Layer 1: construction constants -------------------------------------- */
+
+:root {
+  /* Golden-angle hue sequence */
+  --mem-h0: 132.109;   /*  lime-950 anchor — identity, category 1, code strings */
+  --mem-h1: 267.935;   /*  blue-950 anchor — interaction, category 2, code keywords */
+  --mem-h2:  47.125;   /*  warning, category 3, code special */
+  --mem-h3: 184.632;   /*  info, category 4 */
+  --mem-h4: 322.140;   /*  category 5, code functions */
+  --mem-h5:  99.648;   /*  category 6 */
+  --mem-h6: 237.156;   /*  note */
+  --mem-h7:  14.663;   /*  bug, code numbers */
+
+  /* Chroma levels */
+  --mem-c-calm:  0.075;   /* asides   */
+  --mem-c-std:   0.120;   /* default  */
+  --mem-c-alert: 0.170;   /* cautions */
+
+  /* Mandated anchors, used literally */
+  --mem-anchor-lime: #192e03;
+  --mem-anchor-lime: oklch(27.4% 0.072 var(--mem-h0));
+  --mem-anchor-blue: #162456;
+  --mem-anchor-blue: oklch(28.2% 0.091 var(--mem-h1));
+  --mem-anchor-violet: #2f0d68;
+  --mem-anchor-violet: oklch(28.3% 0.141 291.089);
+}
+
+
+/* --- Layer 2: semantic tokens — light ------------------------------------- */
+
+:root,
+[data-md-color-scheme="default"] {
+  /* identity surface — lime-950 anchor, literal */
+  --mem-identity: #192e03;
+  --mem-identity: oklch(27.4% 0.072 var(--mem-h0));
+
+  /* s1 · standard · solved 6:1  (6.00:1) */
+  --mem-link: #4760a9;
+  --mem-link: oklch(50.5% var(--mem-c-std) var(--mem-h1));
+  /* s1 · 0.140 · solved 9:1  (9.00:1) */
+  --mem-link-hover: #2b4296;
+  --mem-link-hover: oklch(41.3% 0.140 var(--mem-h1));
+
+  /* s6 · calm · solved 3.5:1  (3.50:1) */
+  --mem-note: #5a8fb0;
+  --mem-note: oklch(62.6% var(--mem-c-calm) var(--mem-h6));
+  /* s3 · calm · solved 3.5:1  (3.50:1) */
+  --mem-info: #4c958c;
+  --mem-info: oklch(62.1% var(--mem-c-calm) var(--mem-h3));
+  /* s2 · alert · solved 3.5:1  (3.50:1) */
+  --mem-warning: #de6617;
+  --mem-warning: oklch(64.6% var(--mem-c-alert) var(--mem-h2));
+  /* s7 · alert · solved 3.5:1  (3.50:1) */
+  --mem-bug: #e35b6e;
+  --mem-bug: oklch(65.1% var(--mem-c-alert) var(--mem-h7));
+
+  /* diagram structure  (1.06:1) */
+  --mem-diagram-surface: #f6faf3;
+  --mem-diagram-surface: oklch(98.0% 0.010 var(--mem-h0));
+  /* diagram structure  (3.61:1) */
+  --mem-diagram-border: #82897d;
+  --mem-diagram-border: oklch(62.0% 0.020 var(--mem-h0));
+  /* diagram structure  (13.59:1) */
+  --mem-diagram-ink: #2c2f2a;
+  --mem-diagram-ink: oklch(30.0% 0.010 var(--mem-h0));
+
+  /* s0 · solved 3.0:1  (3.00:1) */
+  --mem-cat-1: #73a249;
+  --mem-cat-1: oklch(65.9% 0.130 var(--mem-h0));
+  /*    companion fill */
+  --mem-cat-1-fill: #ecf6e5;
+  --mem-cat-1-fill: oklch(96.0% 0.024 var(--mem-h0));
+  /* s1 · solved 3.7:1  (3.70:1) */
+  --mem-cat-2: #6582d5;
+  --mem-cat-2: oklch(62.1% 0.130 var(--mem-h1));
+  /*    companion fill */
+  --mem-cat-2-fill: #ecf2ff;
+  --mem-cat-2-fill: oklch(96.0% 0.019 var(--mem-h1));
+  /* s2 · solved 4.4:1  (4.40:1) */
+  --mem-cat-3: #b9602f;
+  --mem-cat-3: oklch(58.6% 0.130 var(--mem-h2));
+  /*    companion fill */
+  --mem-cat-3-fill: #ffeee6;
+  --mem-cat-3-fill: oklch(96.0% 0.022 var(--mem-h2));
+  /* s3 · solved 5.1:1  (5.10:1) */
+  --mem-cat-4: #007c71;
+  --mem-cat-4: oklch(52.7% 0.093 var(--mem-h3));
+  /*    companion fill */
+  --mem-cat-4-fill: #e1f7f4;
+  --mem-cat-4-fill: oklch(96.0% 0.024 var(--mem-h3));
+  /* s4 · solved 5.8:1  (5.80:1) */
+  --mem-cat-5: #8c4d96;
+  --mem-cat-5: oklch(52.4% 0.130 var(--mem-h4));
+  /*    companion fill */
+  --mem-cat-5-fill: #faedfc;
+  --mem-cat-5-fill: oklch(96.0% 0.024 var(--mem-h4));
+  /* s5 · solved 6.5:1  (6.50:1) */
+  --mem-cat-6: #6b5e00;
+  --mem-cat-6: oklch(48.0% 0.100 var(--mem-h5));
+  /*    companion fill */
+  --mem-cat-6-fill: #f5f3e0;
+  --mem-cat-6-fill: oklch(96.0% 0.024 var(--mem-h5));
+
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-keyword: #4d66b0;
+  --mem-code-keyword: oklch(52.7% var(--mem-c-std) var(--mem-h1));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-string: #4c7523;
+  --mem-code-string: oklch(51.3% var(--mem-c-std) var(--mem-h0));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-number: #a84d58;
+  --mem-code-number: oklch(53.7% var(--mem-c-std) var(--mem-h7));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-function: #8e5497;
+  --mem-code-function: oklch(53.7% var(--mem-c-std) var(--mem-h4));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-constant: #6e5eac;
+  --mem-code-constant: oklch(53.2% var(--mem-c-std) 291.089);
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-special: #a35427;
+  --mem-code-special: oklch(53.4% var(--mem-c-std) var(--mem-h2));
+}
+
+
+/* --- Layer 2: semantic tokens — dark -------------------------------------- */
+/* The same three rules; the lightness solver runs upward instead of downward.
+   Page ground is the blue-950 anchor, the elevated/code surface the violet-950
+   anchor. They are separated by hue, not lightness — both anchors sit at the
+   same lightness — so elevation is carried by a border, never by tone. */
+
+[data-md-color-scheme="slate"] {
+  /* identity surface — lime-950 anchor, literal */
+  --mem-identity: #192e03;
+  --mem-identity: oklch(27.4% 0.072 var(--mem-h0));
+
+  /* s1 · standard · solved 6:1  (6.00:1) */
+  --mem-link: #86a3f2;
+  --mem-link: oklch(72.5% var(--mem-c-std) var(--mem-h1));
+  /* s1 · 0.140 · solved 9:1  (9.00:1) */
+  --mem-link-hover: #b4c9ff;
+  --mem-link-hover: oklch(84.0% 0.079 var(--mem-h1));
+
+  /* s6 · calm · solved 3.5:1  (3.50:1) */
+  --mem-note: #4d81a1;
+  --mem-note: oklch(58.0% var(--mem-c-calm) var(--mem-h6));
+  /* s3 · calm · solved 3.5:1  (3.50:1) */
+  --mem-info: #3d877e;
+  --mem-info: oklch(57.4% var(--mem-c-calm) var(--mem-h3));
+  /* s2 · alert · solved 3.5:1  (3.50:1) */
+  --mem-warning: #cc5900;
+  --mem-warning: oklch(59.9% 0.166 var(--mem-h2));
+  /* s7 · alert · solved 3.5:1  (3.50:1) */
+  --mem-bug: #d34c61;
+  --mem-bug: oklch(60.5% var(--mem-c-alert) var(--mem-h7));
+
+  /* diagram structure  (1.11:1) */
+  --mem-diagram-surface: #1d201b;
+  --mem-diagram-surface: oklch(24.0% 0.010 var(--mem-h0));
+  /* diagram structure  (3.77:1) */
+  --mem-diagram-border: #7c8377;
+  --mem-diagram-border: oklch(60.0% 0.020 var(--mem-h0));
+  /* diagram structure  (11.70:1) */
+  --mem-diagram-ink: #e2e6df;
+  --mem-diagram-ink: oklch(92.0% 0.010 var(--mem-h0));
+
+  /* s0 · solved 3.0:1  (3.00:1) */
+  --mem-cat-1: #507c21;
+  --mem-cat-1: oklch(53.6% 0.130 var(--mem-h0));
+  /*    companion fill */
+  --mem-cat-1-fill: #212a1a;
+  --mem-cat-1-fill: oklch(27.0% 0.030 var(--mem-h0));
+  /* s1 · solved 3.7:1  (3.70:1) */
+  --mem-cat-2: #5f7cce;
+  --mem-cat-2: oklch(60.2% 0.130 var(--mem-h1));
+  /*    companion fill */
+  --mem-cat-2-fill: #202635;
+  --mem-cat-2-fill: oklch(27.0% 0.030 var(--mem-h1));
+  /* s2 · solved 4.4:1  (4.40:1) */
+  --mem-cat-3: #cf7445;
+  --mem-cat-3: oklch(65.2% 0.130 var(--mem-h2));
+  /*    companion fill */
+  --mem-cat-3-fill: #33221a;
+  --mem-cat-3-fill: oklch(27.0% 0.030 var(--mem-h2));
+  /* s3 · solved 5.1:1  (5.10:1) */
+  --mem-cat-4: #00aa9c;
+  --mem-cat-4: oklch(66.4% 0.117 var(--mem-h3));
+  /*    companion fill */
+  --mem-cat-4-fill: #142b28;
+  --mem-cat-4-fill: oklch(27.0% 0.030 var(--mem-h3));
+  /* s4 · solved 5.8:1  (5.80:1) */
+  --mem-cat-5: #cd8ad7;
+  --mem-cat-5: oklch(72.8% 0.130 var(--mem-h4));
+  /*    companion fill */
+  --mem-cat-5-fill: #2d222f;
+  --mem-cat-5-fill: oklch(27.0% 0.030 var(--mem-h4));
+  /* s5 · solved 6.5:1  (6.50:1) */
+  --mem-cat-6: #bfad3e;
+  --mem-cat-6: oklch(74.2% 0.130 var(--mem-h5));
+  /*    companion fill */
+  --mem-cat-6-fill: #2a2715;
+  --mem-cat-6-fill: oklch(27.0% 0.030 var(--mem-h5));
+
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-keyword: #7591df;
+  --mem-code-keyword: oklch(66.9% var(--mem-c-std) var(--mem-h1));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-string: #75a04f;
+  --mem-code-string: oklch(65.5% var(--mem-c-std) var(--mem-h0));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-number: #d87881;
+  --mem-code-number: oklch(68.0% var(--mem-c-std) var(--mem-h7));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-function: #bb7ec4;
+  --mem-code-function: oklch(67.9% var(--mem-c-std) var(--mem-h4));
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-constant: #9789db;
+  --mem-code-constant: oklch(67.5% var(--mem-c-std) 291.089);
+  /* solved 5:1 on the code surface  (5.00:1) */
+  --mem-code-special: #d37e53;
+  --mem-code-special: oklch(67.6% var(--mem-c-std) var(--mem-h2));
+}
+
+
+/* --- Layer 3: bridge — point Material's own tokens at the semantic ones ---- */
+/* Material's neutral ladder (text, backgrounds, borders, table rules) is
+   inherited unchanged: it is alpha-black over the ground, which composes
+   correctly on any surface. Only chromatic tokens are redirected. */
+
+:root,
+[data-md-color-scheme="default"] {
+  /* identity */
+  --md-primary-fg-color:        var(--mem-identity);
+  --md-primary-fg-color--light: color-mix(in oklab, var(--mem-identity) 78%, white);
+  --md-primary-fg-color--dark:  color-mix(in oklab, var(--mem-identity) 85%, black);
+  --md-footer-bg-color:         var(--mem-identity);
+  --md-footer-bg-color--dark:   color-mix(in oklab, var(--mem-identity) 85%, black);
+
+  /* interaction — one token drives 51 rules in the theme */
+  --md-typeset-a-color:              var(--mem-link);
+  --md-accent-fg-color:              var(--mem-link-hover);
+  --md-accent-fg-color--transparent: color-mix(in oklab, var(--mem-link-hover) 10%, transparent);
+
+  /* syntax */
+  --md-code-hl-keyword-color:  var(--mem-code-keyword);
+  --md-code-hl-string-color:   var(--mem-code-string);
+  --md-code-hl-number-color:   var(--mem-code-number);
+  --md-code-hl-function-color: var(--mem-code-function);
+  --md-code-hl-constant-color: var(--mem-code-constant);
+  --md-code-hl-special-color:  var(--mem-code-special);
+  --md-code-hl-color:          color-mix(in oklab, var(--mem-link) 22%, transparent);
+}
+
+[data-md-color-scheme="slate"] {
+  /* surfaces come straight from the anchors */
+  --md-default-bg-color: var(--mem-anchor-blue);
+  --md-code-bg-color:    var(--mem-anchor-violet);
+
+  --md-primary-fg-color:        var(--mem-identity);
+  --md-primary-fg-color--light: color-mix(in oklab, var(--mem-identity) 70%, white);
+  --md-primary-fg-color--dark:  color-mix(in oklab, var(--mem-identity) 85%, black);
+  --md-footer-bg-color:         var(--mem-identity);
+  --md-footer-bg-color--dark:   color-mix(in oklab, var(--mem-identity) 85%, black);
+
+  --md-typeset-a-color:              var(--mem-link);
+  --md-accent-fg-color:              var(--mem-link-hover);
+  --md-accent-fg-color--transparent: color-mix(in oklab, var(--mem-link-hover) 14%, transparent);
+
+  --md-code-hl-keyword-color:  var(--mem-code-keyword);
+  --md-code-hl-string-color:   var(--mem-code-string);
+  --md-code-hl-number-color:   var(--mem-code-number);
+  --md-code-hl-function-color: var(--mem-code-function);
+  --md-code-hl-constant-color: var(--mem-code-constant);
+  --md-code-hl-special-color:  var(--mem-code-special);
+  --md-code-hl-color:          color-mix(in oklab, var(--mem-link) 26%, transparent);
+}
+
+/* Both anchors that form the dark surfaces share a lightness, so the header and
+   the code surface need a drawn edge rather than a tonal step. */
+[data-md-color-scheme="slate"] .md-header { box-shadow: inset 0 -1px 0 #ffffff1f; }
+[data-md-color-scheme="slate"] .md-typeset pre > code,
+[data-md-color-scheme="slate"] .md-typeset > p > code,
+[data-md-color-scheme="slate"] .md-typeset li > code { border: 1px solid #ffffff14; }
+
+/* --- Admonitions ---------------------------------------------------------- */
+/* Material hardcodes one literal per type across five rules instead of exposing
+   a variable, so each of the four house types is re-pointed explicitly. The
+   10% title tint is derived with color-mix, so one token still covers a type. */
+
+
+.md-typeset .admonition.note,
+.md-typeset details.note { border-color: var(--mem-note); }
+
+.md-typeset .admonition.note:focus-within,
+.md-typeset details.note:focus-within {
+  box-shadow: 0 0 0 .2rem color-mix(in oklab, var(--mem-note) 10%, transparent);
+}
+
+.md-typeset .note > .admonition-title,
+.md-typeset .note > summary {
+  background-color: color-mix(in oklab, var(--mem-note) 10%, transparent);
+}
+
+.md-typeset .note > .admonition-title::before,
+.md-typeset .note > summary::before { background-color: var(--mem-note); }
+
+.md-typeset .note > .admonition-title::after,
+.md-typeset .note > summary::after { color: var(--mem-note); }
+
+
+.md-typeset .admonition.info,
+.md-typeset details.info { border-color: var(--mem-info); }
+
+.md-typeset .admonition.info:focus-within,
+.md-typeset details.info:focus-within {
+  box-shadow: 0 0 0 .2rem color-mix(in oklab, var(--mem-info) 10%, transparent);
+}
+
+.md-typeset .info > .admonition-title,
+.md-typeset .info > summary {
+  background-color: color-mix(in oklab, var(--mem-info) 10%, transparent);
+}
+
+.md-typeset .info > .admonition-title::before,
+.md-typeset .info > summary::before { background-color: var(--mem-info); }
+
+.md-typeset .info > .admonition-title::after,
+.md-typeset .info > summary::after { color: var(--mem-info); }
+
+
+.md-typeset .admonition.warning,
+.md-typeset details.warning { border-color: var(--mem-warning); }
+
+.md-typeset .admonition.warning:focus-within,
+.md-typeset details.warning:focus-within {
+  box-shadow: 0 0 0 .2rem color-mix(in oklab, var(--mem-warning) 10%, transparent);
+}
+
+.md-typeset .warning > .admonition-title,
+.md-typeset .warning > summary {
+  background-color: color-mix(in oklab, var(--mem-warning) 10%, transparent);
+}
+
+.md-typeset .warning > .admonition-title::before,
+.md-typeset .warning > summary::before { background-color: var(--mem-warning); }
+
+.md-typeset .warning > .admonition-title::after,
+.md-typeset .warning > summary::after { color: var(--mem-warning); }
+
+
+.md-typeset .admonition.bug,
+.md-typeset details.bug { border-color: var(--mem-bug); }
+
+.md-typeset .admonition.bug:focus-within,
+.md-typeset details.bug:focus-within {
+  box-shadow: 0 0 0 .2rem color-mix(in oklab, var(--mem-bug) 10%, transparent);
+}
+
+.md-typeset .bug > .admonition-title,
+.md-typeset .bug > summary {
+  background-color: color-mix(in oklab, var(--mem-bug) 10%, transparent);
+}
+
+.md-typeset .bug > .admonition-title::before,
+.md-typeset .bug > summary::before { background-color: var(--mem-bug); }
+
+.md-typeset .bug > .admonition-title::after,
+.md-typeset .bug > summary::after { color: var(--mem-bug); }

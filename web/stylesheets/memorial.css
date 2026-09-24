@@ -1,0 +1,320 @@
+/* Upload and admin components. Colors come only from Material's variables and the
+   colors.css tokens, so light and dark share one palette. */
+
+/* --- Centered layout ---------------------------------------------------------
+   Both pages are a single column centered in the window, not Material's
+   left-aligned docs layout. The guest page stays narrow like a phone screen; the
+   admin list needs more room for its table. */
+
+.md-main .md-content__inner {
+  box-sizing: border-box;
+  max-width: 34rem;
+  margin-inline: auto;
+  padding-inline: .8rem;
+}
+
+.md-main .md-content__inner:has(.mu-table) { max-width: 56rem; }
+
+.md-typeset h1 { text-align: center; }
+
+/* --- Portrait ------------------------------------------------------------------
+   Centered at the top of the guest page. Capped at about half the screen height so
+   the upload button stays within reach on a phone; the crop keeps the face. */
+
+.md-typeset .mu-portrait {
+  margin: .4rem auto 0;
+  width: 100%;
+}
+
+.md-typeset .mu-portrait img {
+  display: block;
+  width: min(100%, 24rem);
+  height: auto;
+  max-height: 55vh;
+  margin: 0 auto;
+  aspect-ratio: 1086 / 1233;
+  object-fit: cover;
+  object-position: 60% 25%;
+  border-radius: .4rem;
+  box-shadow: var(--md-shadow-z2);
+}
+
+.md-typeset .mu-portrait[hidden] { display: none; }
+
+/* Quotation box under the portrait: a soft card framed by oversized opening and
+   closing quote marks, in the same width as the photo. */
+.md-typeset blockquote.mu-quote {
+  position: relative;
+  box-sizing: border-box;
+  width: min(100%, 24rem);
+  margin: 1.2rem auto 2rem;
+  padding: 1rem 1.4rem;
+  color: var(--md-default-fg-color);
+  text-align: center;
+  background: color-mix(in oklab, var(--mem-link) 7%, var(--md-default-bg-color));
+  border: 0;
+  border-radius: .4rem;
+  box-shadow: var(--md-shadow-z1);
+}
+
+.md-typeset blockquote.mu-quote::before,
+.md-typeset blockquote.mu-quote::after {
+  position: absolute;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 3.2rem;
+  line-height: 1;
+  color: color-mix(in oklab, var(--mem-link) 45%, transparent);
+}
+
+/* Both marks sit inside the card, 10 px from their rim and 15 px from their side
+   (measured in a screenshot). The offsets differ because each glyph's ink sits high in
+   its glyph box, so the same distance needs different values at the top and bottom. */
+.md-typeset blockquote.mu-quote::before {
+  content: "\201C";
+  top: .15rem;
+  left: .6rem;
+}
+
+.md-typeset blockquote.mu-quote::after {
+  content: "\201D";
+  right: .6rem;
+  bottom: -1.55rem;
+}
+
+.md-typeset blockquote.mu-quote p {
+  margin: 0;
+  font-size: 1.05rem;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: .01em;
+}
+
+.md-footer-meta__inner { justify-content: center; }
+.md-copyright { width: 100%; margin-inline: auto; text-align: center; }
+
+.mu-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.md-typeset .mu-form {
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+  margin: 1.6rem 0;
+}
+
+.md-typeset .mu-form--wide { max-width: none; }
+
+/* The components below set `display`, which would otherwise beat the attribute. */
+.md-typeset .mu-form [hidden] { display: none !important; }
+
+.md-typeset .mu-field label {
+  display: block;
+  margin-bottom: .3rem;
+  font-weight: 700;
+}
+
+.md-typeset .mu-optional {
+  font-weight: 400;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .mu-field input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: .6rem .7rem;
+  font: inherit;
+  /* 16px minimum stops iOS Safari from zooming into the field on focus. */
+  font-size: max(16px, .8rem);
+  color: var(--md-default-fg-color);
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: .2rem;
+}
+
+.md-typeset .mu-field input:focus {
+  outline: 2px solid var(--mem-link);
+  outline-offset: 1px;
+}
+
+.md-typeset .mu-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.2rem;
+  padding: .6rem 1.4rem;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--md-primary-bg-color);
+  background: var(--md-primary-fg-color);
+  border: 2px solid var(--md-primary-fg-color);
+  border-radius: .2rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 125ms, border-color 125ms;
+}
+
+.md-typeset .mu-button:hover {
+  background: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+}
+
+/* The real control is the visually hidden file input just before the label. */
+.mu-visually-hidden:focus-visible + .mu-button,
+.md-typeset .mu-button:focus-visible {
+  outline: 2px solid var(--mem-link);
+  outline-offset: 2px;
+}
+
+.md-typeset .mu-button--secondary {
+  color: var(--mem-link);
+  background: transparent;
+  border-color: var(--mem-link);
+}
+
+.md-typeset .mu-button--secondary:hover {
+  color: var(--md-primary-bg-color);
+  background: var(--mem-link);
+  border-color: var(--mem-link);
+}
+
+.md-typeset .mu-button.is-disabled,
+.md-typeset .mu-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.md-typeset .mu-limits {
+  margin: 0;
+  font-size: .7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Status box, drawn like an admonition. */
+.md-typeset .mu-message {
+  --mu-tone: var(--mem-info);
+  padding: .6rem .8rem;
+  border-left: .2rem solid var(--mu-tone);
+  border-radius: .2rem;
+  background: color-mix(in oklab, var(--mu-tone) 10%, transparent);
+}
+
+.md-typeset .mu-message[data-kind="success"] { --mu-tone: var(--mem-cat-1); }
+.md-typeset .mu-message[data-kind="error"]   { --mu-tone: var(--mem-bug); }
+.md-typeset .mu-message[data-kind="success"] { font-weight: 700; }
+
+.md-typeset .mu-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.md-typeset .mu-list li {
+  margin: 0 0 .5rem;
+  padding: .4rem 0;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .mu-list .mu-file {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-typeset .mu-list .mu-status {
+  display: block;
+  font-size: .7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .mu-list li[data-status="done"] .mu-status     { color: var(--mem-cat-1); }
+.md-typeset .mu-list li[data-status="failed"] .mu-status,
+.md-typeset .mu-list li[data-status="rejected"] .mu-status { color: var(--mem-bug); }
+
+.md-typeset .mu-list progress {
+  width: 100%;
+  height: .3rem;
+  accent-color: var(--mem-link);
+}
+
+.md-typeset .mu-table-wrap { overflow-x: auto; }
+.md-typeset .mu-table { display: table; width: 100%; }
+.md-typeset .mu-table td:first-child { word-break: break-all; }
+
+/* --- QR code button and dialog -------------------------------------------- */
+
+/* Until upload.js has moved it into the header. */
+.md-typeset #mu-qr-open { display: none; }
+
+.md-typeset .mu-qr {
+  box-sizing: border-box;
+  width: min(92vw, 22rem);
+  padding: 1.2rem;
+  color: var(--md-default-fg-color);
+  text-align: center;
+  background: var(--md-default-bg-color);
+  border: 0;
+  border-radius: .4rem;
+  box-shadow: var(--md-shadow-z3);
+}
+
+.md-typeset .mu-qr::backdrop { background: rgb(0 0 0 / 60%); }
+
+.md-typeset .mu-qr[open] {
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+}
+
+.md-typeset .mu-qr p { margin: 0; }
+
+.md-typeset .mu-qr-title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Always dark on white: scanners need the contrast, whatever the theme. */
+.md-typeset .mu-qr-image {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  padding: .8rem;
+  background: #fff;
+  border-radius: .2rem;
+  image-rendering: pixelated;
+}
+
+.md-typeset .mu-qr-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-weight: 700;
+  color: var(--md-default-fg-color--light);
+  border: 2px dashed var(--md-default-fg-color--lighter);
+  border-radius: .2rem;
+}
+
+.md-typeset .mu-qr-placeholder[hidden] { display: none; }
+
+.md-typeset .mu-qr-url {
+  font-size: .7rem;
+  word-break: break-all;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .mu-qr form { margin: 0; }
+.md-typeset .mu-qr .mu-button { width: 100%; }

@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. The admin credential goes into
+# auth.auto.tfvars instead, written by ../set-password.sh.
+
+# RFC 3339, UTC. New uploads stop here; started ones may still finish for 6 hours.
+upload_deadline = "2026-12-31T23:59:00Z"
+
+# Shown in the page header and used as the portrait's alt text.
+event_title = "In Erinnerung an Andreas"
+
+# Small text at the bottom of every page. Leave empty for none.
+footer_text = "Created with love by AI and Chris for Andreas. ♥️"
+
+# Optional overrides (defaults shown).
+# aws_region   = "eu-central-1"
+# name_prefix  = "memorial-upload"
+# max_files    = 20
+# max_photo_mb = 50
+# max_video_mb = 300

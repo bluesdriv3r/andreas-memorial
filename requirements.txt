@@ -1,0 +1,5 @@
+# Build-time only: renders web/ into site/. Nothing here is deployed except the
+# generated pages and Material's theme assets.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+pymdown-extensions==11.0.1
