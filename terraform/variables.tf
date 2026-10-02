@@ -21,17 +21,53 @@ variable "price_class" {
   }
 }
 
-variable "credential_sha256" {
+variable "admin_users" {
   description = <<-EOT
-    Hex SHA-256 digest of the base64-encoded "user:password" Basic Auth token for the
-    admin area. Written to auth.auto.tfvars by ../set-password.sh — never set it by hand.
+    Admin logins: username -> PBKDF2-SHA256 password hash
+    ("pbkdf2_sha256$<iterations>$<salt hex>$<hash hex>"). Checked by the Lambda at
+    POST /api/login. Written to auth.auto.tfvars.json by ../set-password.sh — never by hand.
+  EOT
+  type        = map(string)
+  sensitive   = true
+
+  validation {
+    condition = length(var.admin_users) > 0 && alltrue([
+      for name, hash in var.admin_users :
+      can(regex("^[a-z0-9-]{1,32}$", name)) && can(regex("^pbkdf2_sha256\\$[0-9]{6,7}\\$[0-9a-f]{32}\\$[0-9a-f]{64}$", hash))
+    ])
+    error_message = "admin_users needs at least one user with a lowercase name and a valid hash. Run ../set-password.sh <username>."
+  }
+}
+
+variable "admin_owners" {
+  description = "Admins (keys of admin_users) who may also delete uploads. Written by ../set-password.sh --owner."
+  type        = list(string)
+  default     = []
+}
+
+variable "session_key" {
+  description = <<-EOT
+    HMAC key that signs the admin session cookie, shared by the Lambda (signs at login)
+    and the CloudFront Function (verifies every /admin request). Written to
+    auth.auto.tfvars.json by ../set-password.sh; a new key ends every session.
   EOT
   type        = string
   sensitive   = true
 
   validation {
-    condition     = can(regex("^[0-9a-f]{64}$", var.credential_sha256))
-    error_message = "credential_sha256 must be 64 lowercase hex characters. Run ../set-password.sh."
+    condition     = can(regex("^[0-9a-f]{64}$", var.session_key))
+    error_message = "session_key must be 64 lowercase hex characters. Run ../set-password.sh."
+  }
+}
+
+variable "session_hours" {
+  description = "How long an admin login stays valid, in hours."
+  type        = number
+  default     = 12
+
+  validation {
+    condition     = var.session_hours >= 1 && var.session_hours <= 168
+    error_message = "session_hours must be between 1 and 168."
   }
 }
 

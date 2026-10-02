@@ -3,12 +3,13 @@
 # Post-deploy verification for the memorial upload page.
 #
 # The public and negative checks need no credentials and always run. With the admin
-# credential it also checks the admin area and performs one real end-to-end
+# password it also logs in, checks the admin pages, performs one real end-to-end
 # multipart upload (uploader "verify-sh"), including a part of the wrong length that
-# S3 must refuse. The test object is removed again when AWS credentials are available.
+# S3 must refuse, and logs out again. The test object is removed again when AWS
+# credentials are available.
 #
 #   moon run memorial:verify
-#   MEMORIAL_CREDENTIAL='user:pass' moon run memorial:verify
+#   MEMORIAL_USER='…' MEMORIAL_PASSWORD='…' moon run memorial:verify
 #
 # Exits non-zero if any check fails.
 
@@ -42,6 +43,18 @@ check() {
         pass "$label [$got]"
     else
         fail "$label" "expected $expect, got $got"
+    fi
+}
+
+# redirects_to_login <label> <curl args...> — expects a 302 to the login page.
+redirects_to_login() {
+    local label=$1 got
+    shift
+    got="$(curl -so /dev/null -w '%{http_code} %header{location}' --max-time 20 "$@" 2>/dev/null || echo 000)"
+    if [[ "$got" == "302 /login/index.html?next="* ]]; then
+        pass "$label [302 → login]"
+    else
+        fail "$label" "expected 302 to the login page, got $got"
     fi
 }
 
@@ -88,16 +101,19 @@ check "complete with forged key refused" 400 -X POST "$url/api/upload/complete" 
 check "POST without body hash refused" 403 -X POST "$url/api/upload" -H 'content-type: application/json' \
     --data-raw "$notmedia"
 
-printf '\nAdmin boundary (no credential)\n'
-for path in /admin /admin/ /admin/index.html /admin/api/list /admin/files/x.jpg; do
-    check "$path" 401 "$url$path"
+printf '\nAdmin boundary (no session)\n'
+for path in /admin /admin/ /admin/index.html /admin/gallery/ /admin/files/x.jpg; do
+    redirects_to_login "$path" "$url$path"
 done
-check "wrong credentials rejected"  401 -u 'wrong:credentials' "$url/admin/"
-if curl -sI --max-time 20 "$url/admin/" | tr -d '\r' | grep -qi '^www-authenticate: Basic realm='; then
-    pass "WWW-Authenticate challenge present"
-else
-    fail "WWW-Authenticate challenge present" "header missing or malformed"
-fi
+check "/admin/api/list"             401 "$url/admin/api/list"
+forged_cookie="__Host-mem_admin=markus.$(( $(date +%s) + 3600 )).$(printf '0%.0s' {1..64})"
+redirects_to_login "forged session cookie" -b "$forged_cookie" "$url/admin/gallery/"
+check "forged cookie on API"        401 -b "$forged_cookie" "$url/admin/api/list"
+redirects_to_login "old Basic Auth header" -u 'user:password' "$url/admin/"
+check "login page"                  200 "$url/login/index.html"
+wrong='{"username":"nobody","password":"definitely-not-the-password"}'
+check "wrong password rejected"     401 -X POST "$url/api/login" -H 'content-type: application/json' \
+    -H "x-amz-content-sha256: $(sha256 "$wrong")" --data-raw "$wrong"
 # The guest API must not expose admin routes or the bucket.
 check "/api/admin/list not routed"  404 "$url/api/admin/list"
 check "/uploads/ not public"        403,404 "$url/uploads/x.jpg"
@@ -116,28 +132,51 @@ for header in strict-transport-security x-content-type-options content-security-
 done
 
 printf '\nAdmin side and end-to-end upload\n'
-credential="${MEMORIAL_CREDENTIAL:-}"
+user="${MEMORIAL_USER:-}"
+password="${MEMORIAL_PASSWORD:-}"
 # Prompt only when both streams are a terminal; under a task runner the prompt
 # would be invisible while `read` blocked.
-if [[ -z "$credential" && -t 0 && -t 1 ]]; then
-    printf '  user:password (blank to skip) > '
-    read -rs -t 120 credential || true
+if [[ -z "$user" && -t 0 && -t 1 ]]; then
+    printf '  admin username (blank to skip) > '
+    read -r -t 120 user || true
+fi
+if [[ -n "$user" && -z "$password" && -t 0 && -t 1 ]]; then
+    printf '  admin password > '
+    IFS= read -rs -t 120 password || true
     printf '\n'
 fi
 
-if [[ -z "$credential" ]]; then
-    info "skipped — no credential supplied"
+if [[ -z "$user" || -z "$password" ]]; then
+    info "skipped — no username or password supplied"
 elif ! command -v node >/dev/null; then
-    info "skipped — node is needed to parse the upload grant"
+    info "skipped — node is needed to build the login request and parse the upload grant"
 else
-    check "admin page"          200 -u "$credential" "$url/admin/"
-    check "admin list"          200 -u "$credential" "$url/admin/api/list"
+    # The session cookie and the login body live only in these temporary files
+    # (mktemp: mode 600), so the password never appears in a process list.
+    jar="$(mktemp -t memorial-verify-jar)"
+    login_body="$(mktemp -t memorial-verify-login)"
+    probe="$(mktemp -t memorial-verify)"
+    longer="$(mktemp -t memorial-verify-long)"
+    trap 'rm -f "$jar" "$login_body" "$probe" "$longer"' EXIT
+
+    # JSON-encode the password via stdin, so quotes or backslashes in it cannot break the body.
+    printf '%s' "$password" | ADMIN_USER="$user" node -e '
+        const password = require("node:fs").readFileSync(0, "utf8");
+        process.stdout.write(JSON.stringify({ username: process.env.ADMIN_USER, password, next: "/admin/gallery/" }));
+    ' | tail -n 1 > "$login_body"
+    unset password
+    started=$(date +%s)
+    check "login"               200 -c "$jar" -X POST "$url/api/login" -H 'content-type: application/json' \
+        -H "x-amz-content-sha256: $(shasum -a 256 < "$login_body" | cut -d' ' -f1)" \
+        --data-binary @"$login_body"
+    rm -f "$login_body"
+    info "login took $(( $(date +%s) - started )) s (PBKDF2; raise the Lambda memory if well above 3 s)"
+    check "admin page"          200 -b "$jar" "$url/admin/"
+    check "gallery page"        200 -b "$jar" "$url/admin/gallery/"
+    check "admin list"          200 -b "$jar" "$url/admin/api/list"
 
     # A few bytes are enough: S3 checks the signed length, not the image. The test
     # object is removed again below when AWS credentials are available.
-    probe="$(mktemp -t memorial-verify)"
-    longer="$(mktemp -t memorial-verify-long)"
-    trap 'rm -f "$probe" "$longer"' EXIT
     printf 'memorial-upload verify.sh test object\n' > "$probe"
     printf 'memorial-upload verify.sh test object, one part too long\n' > "$longer"
     size="$(wc -c < "$probe" | tr -d ' ')"
@@ -164,8 +203,9 @@ else
             -H 'content-type: application/json' -H "x-amz-content-sha256: $(sha256 "$target")" \
             --data-raw "$target"
 
-        if curl -fsS --max-time 20 -u "$credential" "$url/admin/api/list" | grep -q "${key#uploads/}"; then
+        if curl -fsS --max-time 20 -b "$jar" "$url/admin/api/list" | grep -q "${key#uploads/}"; then
             pass "uploaded file appears in admin list"
+            check "original served with session" 200 -b "$jar" "$url/admin/files/${key#uploads/}"
             if command -v aws >/dev/null && aws s3 rm "s3://$uploads_bucket/$key" >/dev/null 2>&1; then
                 info "test object removed again"
             else
@@ -175,6 +215,11 @@ else
             fail "uploaded file appears in admin list" "${key#uploads/} not listed"
         fi
     fi
+
+    # Logout clears the cookie in the jar; the admin area must be closed again.
+    check "logout"              303 -b "$jar" -c "$jar" "$url/api/logout"
+    redirects_to_login "gallery after logout" -b "$jar" "$url/admin/gallery/"
+    check "admin list after logout" 401 -b "$jar" "$url/admin/api/list"
 fi
 
 printf '\n'

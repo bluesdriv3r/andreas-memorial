@@ -1,5 +1,6 @@
-# One small function serves the whole API: /api/config and /api/upload[/resume|
-# /complete] (public) and /admin/api/list (behind the admin Basic Auth function).
+# One small function serves the whole API: /api/config, /api/upload[/resume|
+# /complete] and /api/login|logout (public), and /admin/api/list (behind the admin
+# session gate, and checked here again).
 # It never handles file bytes — guests PUT multipart parts straight to S3 with the
 # presigned URLs it returns.
 
@@ -36,6 +37,12 @@ resource "aws_lambda_function" "api" {
       MAX_FILES       = tostring(var.max_files)
       MAX_PHOTO_BYTES = tostring(var.max_photo_mb * 1024 * 1024)
       MAX_VIDEO_BYTES = tostring(var.max_video_mb * 1024 * 1024)
+      # Sensitive, but readable by anyone allowed lambda:GetFunctionConfiguration —
+      # the same principals that can read the CloudFront Function code anyway.
+      ADMIN_USERS   = jsonencode(var.admin_users)
+      ADMIN_OWNERS  = jsonencode(var.admin_owners)
+      SESSION_KEY   = var.session_key
+      SESSION_HOURS = tostring(var.session_hours)
     }
   }
 

@@ -13,6 +13,8 @@
 // the same file again after a reload — continues from the last stored part instead
 // of starting over. S3 discards unfinished uploads after a day.
 
+import { api, ApiError } from './api.js';
+
 const CONCURRENCY = 2;
 const PART_ATTEMPTS = 4;           // per part, waits 1 s, 2 s, 4 s in between
 const REFRESH_ROUNDS = 3;          // resume calls per file before giving up
@@ -172,40 +174,6 @@ function render(item) {
 }
 
 // --- API -------------------------------------------------------------------------
-
-async function sha256Hex(text) {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-class ApiError extends Error {
-    constructor(status, message) {
-        super(message);
-        this.status = status;
-    }
-}
-
-async function api(path, payload) {
-    const body = JSON.stringify(payload);
-    let response;
-    try {
-        response = await fetch(path, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                // CloudFront's origin access control needs the body hash for a POST
-                // to the Lambda function URL; Lambda rejects unsigned payloads.
-                'x-amz-content-sha256': await sha256Hex(body),
-            },
-            body,
-        });
-    } catch {
-        throw new ApiError(0, 'keine Verbindung');
-    }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new ApiError(response.status, data.error || `Serverfehler ${response.status}`);
-    return data;
-}
 
 // Applies a /resume answer: which parts S3 has, and fresh URLs for the rest.
 function applyResume(item, data) {
@@ -450,6 +418,16 @@ function setupQr() {
 
 // --- Portrait ----------------------------------------------------------------------
 
+// The link to the admin area sits quietly in the footer bar, right of the copyright.
+function setupManagementLink() {
+    const link = $('mu-management');
+    const footer = document.querySelector('.md-footer-meta__inner');
+    if (!link || !footer) return;
+    const paragraph = link.closest('p');
+    footer.append(link);
+    if (paragraph && paragraph.textContent.trim() === '') paragraph.remove();
+}
+
 function setupPortrait() {
     const image = $('mu-portrait');
     if (!image) return;
@@ -494,4 +472,5 @@ async function init() {
 
 setupPortrait();
 setupQr();
+setupManagementLink();
 init();

@@ -139,8 +139,8 @@ resource "aws_s3_bucket_policy" "site" {
   depends_on = [aws_s3_bucket_public_access_block.site]
 }
 
-# Read access for the admin downloads under /admin/files/*. The behavior that uses
-# this origin is behind the admin Basic Auth function.
+# Read access for the admin originals under /admin/files/* (downloads, gallery and
+# slideshow). The behavior that uses this origin is behind the admin session gate.
 data "aws_iam_policy_document" "uploads_origin" {
   statement {
     sid       = "AllowCloudFrontRead"
@@ -168,16 +168,17 @@ resource "aws_s3_bucket_policy" "uploads" {
   depends_on = [aws_s3_bucket_public_access_block.uploads]
 }
 
-# --- Edge: admin Basic Auth, cache and header policies --------------------------
+# --- Edge: admin session gate, cache and header policies --------------------------
 
 resource "aws_cloudfront_function" "admin_auth" {
   name    = "${var.name_prefix}-admin-auth"
   runtime = "cloudfront-js-2.0"
-  comment = "Basic Auth for /admin, path mapping for the admin page and downloads"
+  comment = "Session cookie check for /admin, path mapping for admin pages and originals"
   publish = true
 
   code = templatefile("${path.module}/admin-auth.js", {
-    credential_sha256 = var.credential_sha256
+    session_key = var.session_key
+    admin_users = jsonencode(keys(var.admin_users))
   })
 }
 
@@ -288,8 +289,9 @@ resource "aws_cloudfront_distribution" "site" {
     path_pattern           = "/admin/api/*"
     target_origin_id       = local.api_origin_id
     viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
+    # POST for /admin/api/delete; the body hash header OAC needs also stops CSRF.
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods  = ["GET", "HEAD"]
 
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id

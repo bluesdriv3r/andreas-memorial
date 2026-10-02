@@ -4,7 +4,11 @@
 //   POST /api/upload            public  start one S3 multipart upload per announced file
 //   POST /api/upload/resume     public  parts already stored + fresh URLs for the rest
 //   POST /api/upload/complete   public  verify the parts and assemble the object
-//   GET  /admin/api/list        admin   object list; Basic Auth is enforced at the edge
+//   POST /api/login             public  password -> admin session cookie
+//   GET  /api/logout            public  clears the session cookie
+//   GET  /admin/api/list        admin   object list; the session is checked at the edge
+//                                       (terraform/admin-auth.js) and again here
+//   POST /admin/api/delete      owner   delete one upload; only logins in ADMIN_OWNERS
 //
 // The function never touches file bytes. Every file is an S3 multipart upload in
 // PART_SIZE chunks; the browser PUTs each part straight to the bucket with a
@@ -19,7 +23,8 @@
 // Part URLs are signed by hand (SigV4 query auth, node:crypto): the presigner
 // package is not guaranteed to ship with the runtime. The S3 client is.
 
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 import {
     S3Client,
     CreateMultipartUploadCommand,
@@ -27,6 +32,7 @@ import {
     CompleteMultipartUploadCommand,
     AbortMultipartUploadCommand,
     ListObjectsV2Command,
+    DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 
 const BUCKET = process.env.UPLOADS_BUCKET;
@@ -35,6 +41,15 @@ const DEADLINE = process.env.UPLOAD_DEADLINE;
 const MAX_FILES = Number(process.env.MAX_FILES);
 const MAX_PHOTO_BYTES = Number(process.env.MAX_PHOTO_BYTES);
 const MAX_VIDEO_BYTES = Number(process.env.MAX_VIDEO_BYTES);
+// {"<username>": "<pbkdf2 hash>"}, one entry per admin (../set-password.sh).
+const ADMIN_USERS = JSON.parse(process.env.ADMIN_USERS || '{}');
+// ["<username>", …]: admins who may also delete uploads.
+const ADMIN_OWNERS = JSON.parse(process.env.ADMIN_OWNERS || '[]');
+const SESSION_KEY = process.env.SESSION_KEY;
+const SESSION_HOURS = Number(process.env.SESSION_HOURS);
+
+// Must match COOKIE in terraform/admin-auth.js. __Host-: Secure, Path=/, no Domain.
+export const SESSION_COOKIE = '__Host-mem_admin';
 
 const MAX_NAME_LENGTH = 60;
 // 8 MiB: above S3's 5 MiB minimum for all but the last part, small enough that a
@@ -102,6 +117,12 @@ function parseBody(event) {
     }
     throw new HttpError(400, 'Da ist etwas durcheinandergeraten – lad die Seite bitte neu.');
 }
+
+const withCookie = (response, value, maxAge) => ({
+    ...response,
+    // Function URL response format: Lambda turns each entry into a Set-Cookie header.
+    cookies: [`${SESSION_COOKIE}=${value}; Path=/; Max-Age=${maxAge}; Secure; HttpOnly; SameSite=Strict`],
+});
 
 const isOpen = (now = Date.now()) => now < Date.parse(DEADLINE);
 const inGrace = (now = Date.now()) => now < Date.parse(DEADLINE) + COMPLETE_GRACE_MS;
@@ -263,6 +284,57 @@ async function listParts(key, uploadId) {
     return parts;
 }
 
+// --- Admin session ---------------------------------------------------------------
+
+const pbkdf2Async = promisify(pbkdf2);
+
+// Same format as ../set-password.sh writes: pbkdf2_sha256$<iterations>$<salt hex>$<hash hex>.
+export async function hashPassword(password, salt = randomBytes(16), iterations = 600000) {
+    const hash = await pbkdf2Async(password, salt, iterations, 32, 'sha256');
+    return `pbkdf2_sha256$${iterations}$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+export async function checkPassword(password, stored) {
+    const match = /^pbkdf2_sha256\$(\d{1,7})\$([0-9a-f]{32})\$([0-9a-f]{64})$/.exec(String(stored || ''));
+    if (!match) return false;
+    const actual = await pbkdf2Async(password, Buffer.from(match[2], 'hex'), Number(match[1]), 32, 'sha256');
+    return timingSafeEqual(actual, Buffer.from(match[3], 'hex'));
+}
+
+// Lowercase letters, digits and hyphens: safe in the cookie and in the gate's code.
+export const USERNAME_PATTERN = /^[a-z0-9-]{1,32}$/;
+// Checked when the username is unknown, so a wrong name costs as long as a wrong password.
+const UNKNOWN_USER_HASH = `pbkdf2_sha256$600000$${'0'.repeat(32)}$${'0'.repeat(64)}`;
+
+const sign = (payload) => createHmac('sha256', SESSION_KEY).update(payload).digest('hex');
+
+// "<user>.<expiry>.<hmac(user.expiry)>"
+export function sessionValue(user, now = Date.now()) {
+    const payload = `${user}.${Math.floor(now / 1000) + SESSION_HOURS * 3600}`;
+    return `${payload}.${sign(payload)}`;
+}
+
+// Same check as validSession() in terraform/admin-auth.js: signature, expiry, and the
+// user still configured. Function URLs pass cookies as event.cookies ("name=value").
+// Returns the username, or false.
+export function validSession(event, now = Date.now()) {
+    if (!SESSION_KEY) return false;
+    const prefix = `${SESSION_COOKIE}=`;
+    const value = (event.cookies ?? []).find((c) => c.startsWith(prefix))?.slice(prefix.length) ?? '';
+    const match = /^([a-z0-9-]{1,32})\.(\d{1,12})\.([0-9a-f]{64})$/.exec(value);
+    if (!match || !Object.hasOwn(ADMIN_USERS, match[1]) || Number(match[2]) * 1000 <= now) return false;
+    return timingSafeEqual(Buffer.from(sign(`${match[1]}.${match[2]}`)), Buffer.from(match[3])) && match[1];
+}
+
+const isOwner = (user) => ADMIN_OWNERS.includes(user);
+
+// Where to go after login: only an admin path, so ?next= can never become an open
+// redirect or a detour to another part of the site. The gallery is the default.
+export function safeNext(value) {
+    const next = String(value || '');
+    return /^\/admin(\/[\w.~%\/-]*)?$/.test(next) && !/\.\.|%2e/i.test(next) ? next : '/admin/gallery/';
+}
+
 // --- Routes --------------------------------------------------------------------
 
 function config() {
@@ -363,7 +435,37 @@ async function complete(event) {
     return json(200, { key, size: total });
 }
 
-async function list() {
+async function login(event) {
+    if (Object.keys(ADMIN_USERS).length === 0 || !SESSION_KEY) {
+        console.error('ADMIN_USERS or SESSION_KEY is not configured');
+        throw new HttpError(503, 'Anmelden ist gerade nicht möglich.');
+    }
+    const body = parseBody(event);
+    const user = String(body.username || '').trim().toLowerCase();
+    const password = String(body.password || '').slice(0, 1024);
+    const known = USERNAME_PATTERN.test(user) && Object.hasOwn(ADMIN_USERS, user);
+    const valid = await checkPassword(password, known ? ADMIN_USERS[user] : UNKNOWN_USER_HASH);
+    if (!known || !password || !valid) {
+        // No extra delay: PBKDF2 already costs time per guess, and a sleeping invocation
+        // would hold concurrency that guest uploads share with this function.
+        console.log(JSON.stringify({ event: 'login', outcome: 'failed' }));
+        throw new HttpError(401, 'Benutzername oder Passwort stimmt nicht.');
+    }
+    console.log(JSON.stringify({ event: 'login', outcome: 'success', user }));
+    return withCookie(json(200, { next: safeNext(body.next) }), sessionValue(user), SESSION_HOURS * 3600);
+}
+
+// Ends the session in this browser. Other copies of the cookie stay valid until
+// they expire or the session key is rotated (../set-password.sh).
+function logout() {
+    return withCookie({
+        statusCode: 303,
+        // The full key: only /admin paths get directory URLs mapped at the edge.
+        headers: { location: '/login/index.html', 'cache-control': 'no-store' },
+    }, '', 0);
+}
+
+async function list(user) {
     const files = [];
     let ContinuationToken;
     do {
@@ -380,7 +482,18 @@ async function list() {
         ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
     } while (ContinuationToken);
 
-    return json(200, { files });
+    // canDelete only decides whether the page shows delete buttons; /delete checks again.
+    return json(200, { files, canDelete: isOwner(user) });
+}
+
+// Deletes one upload for good: the bucket keeps no old versions.
+async function remove(event, user) {
+    if (!isOwner(user)) throw new HttpError(403, 'Nur Besitzer können Bilder löschen.');
+    const key = `uploads/${String(parseBody(event).key || '')}`;
+    if (!KEY_PATTERN.test(key)) throw new HttpError(400, 'Diese Datei gibt es nicht.');
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+    console.log(JSON.stringify({ event: 'delete', user, key }));
+    return json(200, { deleted: key.slice('uploads/'.length) });
 }
 
 export async function handler(event) {
@@ -392,7 +505,14 @@ export async function handler(event) {
         if (method === 'POST' && path === '/api/upload') return await start(event);
         if (method === 'POST' && path === '/api/upload/resume') return await resume(event);
         if (method === 'POST' && path === '/api/upload/complete') return await complete(event);
-        if (method === 'GET' && path === '/admin/api/list') return await list();
+        if (method === 'POST' && path === '/api/login') return await login(event);
+        if (method === 'GET' && path === '/api/logout') return logout();
+        if (path.startsWith('/admin/api/')) {
+            const user = validSession(event);
+            if (!user) throw new HttpError(401, 'Bitte melde dich an.');
+            if (method === 'GET' && path === '/admin/api/list') return await list(user);
+            if (method === 'POST' && path === '/admin/api/delete') return await remove(event, user);
+        }
         return fail(404, 'Nicht gefunden.');
     } catch (error) {
         if (error instanceof HttpError) return fail(error.statusCode, error.message);

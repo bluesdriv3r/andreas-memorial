@@ -9,6 +9,27 @@ language: 'javascript'
 # are forwarded, e.g.:
 #   moon run memorial:download -- ~/Desktop/slideshow
 tasks:
+  # Python venv with the MkDocs build tools, plus the npm dev dependencies for the
+  # offline tests. Safe to re-run after requirements.txt or package.json change.
+  setup:
+    script: 'python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && npm install'
+    toolchain: 'system'
+    inputs: []
+    options:
+      cache: false
+
+  # Admin logins into terraform/auth.auto.tfvars.json. Prompts, hence interactive:
+  #   moon run memorial:set-password -- <username> [--generate]
+  # Takes effect with `terraform apply`.
+  set-password:
+    command: './set-password.sh'
+    toolchain: 'system'
+    inputs: []
+    options:
+      cache: false
+      interactive: true
+      runInCI: false
+
   # Local inspection build into site/. Title and footer fall back
   # to neutral defaults; publish.sh injects the real ones from Terraform.
   build:
@@ -28,8 +49,7 @@ tasks:
     preset: 'server'
     inputs: []
 
-  # Show pending infrastructure changes. Read-only. There is deliberately no
-  # `infra-apply` task — applying stays a deliberate act with the plan on screen.
+  # Show pending infrastructure changes. Read-only.
   infra-plan:
     command: 'terraform'
     args: ['-chdir=terraform', 'plan']
@@ -37,6 +57,19 @@ tasks:
     inputs: []
     options: &stateful
       cache: false
+      runInCI: false
+
+  # Apply infrastructure and Lambda changes. Terraform shows the plan and waits for
+  # "yes": interactive passes that prompt through, and there is deliberately no
+  # -auto-approve, so the task never applies unreviewed. Never runs in CI.
+  infra-apply:
+    command: 'terraform'
+    args: ['-chdir=terraform', 'apply']
+    toolchain: 'system'
+    inputs: []
+    options:
+      cache: false
+      interactive: true
       runInCI: false
 
   # Build, sync to S3 with --delete, invalidate, then fail unless /api/config
@@ -47,7 +80,7 @@ tasks:
     inputs: []
     options: *stateful
 
-  # Post-deploy checks. MEMORIAL_CREDENTIAL='user:pass' adds the admin checks and a
+  # Post-deploy checks. MEMORIAL_USER='…' MEMORIAL_PASSWORD='…' add the admin login checks and a
   # real end-to-end upload. Exits non-zero on failure.
   verify:
     command: './verify.sh'

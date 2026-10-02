@@ -1,8 +1,9 @@
 # Execution role for the API function. The part URLs are signed with these
 # credentials, so S3 authorizes each guest upload against this policy: PutObject
 # (which covers create, upload-part and complete) only below uploads/, reading back
-# the parts of an upload in progress, discarding an oversized one, and ListBucket for
-# the admin file list. No GetObject, no DeleteObject.
+# the parts of an upload in progress, discarding an oversized one, ListBucket for the
+# admin file list, and DeleteObject for owners deleting an upload. No GetObject.
+# A presigned part URL signs its method and key, so DeleteObject does not reach guests.
 
 data "aws_iam_policy_document" "api_assume" {
   statement {
@@ -44,6 +45,13 @@ data "aws_iam_policy_document" "api" {
       variable = "s3:prefix"
       values   = ["uploads/*"]
     }
+  }
+
+  statement {
+    sid       = "DeleteUploads"
+    effect    = "Allow"
+    actions   = ["s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.uploads.arn}/uploads/*"]
   }
 
   statement {

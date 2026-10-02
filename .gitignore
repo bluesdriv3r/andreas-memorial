@@ -7,12 +7,13 @@ node_modules/
 # MkDocs build output.
 site/
 
-# Terraform: state holds resource IDs; tfvars hold the credential digest, the event
+# Terraform: state holds resource IDs; tfvars hold the login hashes, session key, the event
 # title and the footer text (names stay out of git). Tracked: *.tf, admin-auth.js,
 # .terraform.lock.hcl.
 terraform/.terraform/
 terraform/.build/
 terraform/*.tfvars
+terraform/*.tfvars.json
 terraform/*.tfstate
 terraform/*.tfstate.*
 

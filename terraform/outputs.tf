@@ -4,7 +4,7 @@ output "site_url" {
 }
 
 output "admin_url" {
-  description = "Admin download page, behind Basic Auth."
+  description = "Admin download page, behind the password login. The gallery is at admin/gallery/."
   value       = "${local.site_url}/admin/"
 }
 

@@ -9,17 +9,24 @@ Object.assign(process.env, {
   MAX_FILES: '20', MAX_PHOTO_BYTES: String(50 * 1048576), MAX_VIDEO_BYTES: String(300 * 1048576),
   AWS_ACCESS_KEY_ID: 'AKIDEXAMPLE', AWS_SECRET_ACCESS_KEY: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
   AWS_SESSION_TOKEN: 'IQoJb3JpZ2luX2VjE//token+with/slash==',
+  // Written by set-password.sh for the password 'correct horse battery'.
+  ADMIN_USERS: JSON.stringify({ markus: 'pbkdf2_sha256$600000$32f18017cc838c9be15e2c05110b9885$f8ed876ad273a2002229dd04ab654fd93c18605e60548853731dbd4aae6d6976', marie: 'pbkdf2_sha256$600000$32f18017cc838c9be15e2c05110b9885$f8ed876ad273a2002229dd04ab654fd93c18605e60548853731dbd4aae6d6976' }),
+  ADMIN_OWNERS: JSON.stringify(['marie']),
+  SESSION_KEY: 'a'.repeat(64), SESSION_HOURS: '12',
 });
 const api = await import('../lambda/index.mjs');
+const { createHmac } = await import('node:crypto');
 const { S3Client, UploadPartCommand } = await import('@aws-sdk/client-s3');
 const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fails++; };
 
 // --- Mock S3 -------------------------------------------------------------------
-const uploads = new Map(); const calls = [];
+const uploads = new Map(); const calls = []; const objects = []; const deleted = [];
 api.setS3Client({ send: async (cmd) => {
   const n = cmd.constructor.name, i = cmd.input; calls.push([n, i]);
+  if (n === 'DeleteObjectCommand') { deleted.push(i.Key); return {}; }
+  if (n === 'ListObjectsV2Command') return { Contents: objects.map(([Key, Size]) => ({ Key, Size, LastModified: new Date('2026-10-03T19:04:11Z') })), IsTruncated: false };
   if (n === 'CreateMultipartUploadCommand') { const id = 'up' + uploads.size + '.x_y-z~'; uploads.set(id, { key: i.Key, parts: new Map(), meta: i.Metadata, type: i.ContentType }); return { UploadId: id }; }
   const u = uploads.get(i.UploadId);
   if (!u || u.key !== i.Key) { const e = new Error('nope'); e.name = 'NoSuchUpload'; throw e; }
@@ -92,6 +99,71 @@ for (const [label, t] of [
   ['uploadId with slash', { ...target, uploadId: 'a/b' }],
   ['missing fields', {}],
 ]) ok((await call('POST', '/api/upload/resume', t)).statusCode === 400, `resume rejects ${label}`);
+
+// Admin login, logout and session.
+const PASSWORD = 'correct horse battery';
+const login = (body) => api.handler(ev('POST', '/api/login', body));
+const adminList = (cookies) => api.handler({ ...ev('GET', '/admin/api/list'), cookies });
+ok(await api.checkPassword(PASSWORD, await api.hashPassword(PASSWORD, undefined, 1000)), 'hashPassword/checkPassword round trip');
+ok(!(await api.checkPassword(PASSWORD, 'pbkdf2_sha256$x$y$z')), 'malformed stored hash refused');
+r = await login({ username: 'markus', password: 'wrong password!' });
+ok(r.statusCode === 401 && !r.cookies, 'wrong password: 401, no cookie');
+r = await login({ username: 'nobody', password: PASSWORD });
+ok(r.statusCode === 401 && !r.cookies, 'unknown user: 401, no cookie');
+ok((await login({ password: PASSWORD })).statusCode === 401, 'missing username: 401');
+ok((await login({ username: 'markus', password: ` ${PASSWORD}` })).statusCode === 401, 'password is not trimmed');
+ok((await login({})).statusCode === 401, 'missing password: 401');
+ok((await login({ username: 'hasOwnProperty', password: PASSWORD })).statusCode === 401, 'prototype key as username: 401');
+ok((await api.handler({ ...ev('POST', '/api/login'), body: '{' })).statusCode === 400, 'malformed login body: 400');
+r = await login({ username: ' Markus ', password: PASSWORD, next: '/admin/gallery/' });
+const cookie = r.cookies?.[0] ?? '';
+ok(r.statusCode === 200 && JSON.parse(r.body).next === '/admin/gallery/', 'login: 200 with next');
+ok(/^__Host-mem_admin=markus\.\d+\.[0-9a-f]{64}; Path=\/; Max-Age=43200; Secure; HttpOnly; SameSite=Strict$/.test(cookie), `login cookie flags: ${cookie}`);
+const session = cookie.split(';')[0];
+for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', '/admin/../api/x', '/admin/%2e%2e/x',
+  '/api/logout', '/adminx', '/admin/?a=b', 'javascript:alert(1)']) {
+  ok(api.safeNext(bad) === '/admin/gallery/', `next ${bad} -> /admin/gallery/`);
+}
+ok(api.safeNext('/admin/files/2026-10-03T19-04-11Z_gast_0a1b2c3d.jpg') === '/admin/files/2026-10-03T19-04-11Z_gast_0a1b2c3d.jpg', 'next: admin file kept');
+r = await api.handler(ev('GET', '/api/logout'));
+ok(r.statusCode === 303 && r.headers.location === '/login/index.html' && /^__Host-mem_admin=; Path=\/; Max-Age=0;/.test(r.cookies[0]), 'logout: 303 to login page, cookie cleared');
+
+objects.push(['uploads/2026-10-03T19-04-11Z_gast_0a1b2c3d.jpg', 10], ['uploads/2026-10-03T19-04-12Z_x_00000000.png', 20]);
+const [, exp, sig] = session.split('=')[1].split('.');
+const flip = (c) => (c === '0' ? '1' : '0');
+const mac = (payload) => createHmac('sha256', 'a'.repeat(64)).update(payload).digest('hex');
+const past = Math.floor(Date.now() / 1000) - 1;
+for (const [label, cookies] of [
+  ['no cookie', undefined],
+  ['empty cookie', ['__Host-mem_admin=']],
+  ['forged signature', [`__Host-mem_admin=markus.${exp}.${'0'.repeat(64)}`]],
+  ['tampered signature', [`__Host-mem_admin=markus.${exp}.${flip(sig[0])}${sig.slice(1)}`]],
+  ['extended expiry', [`__Host-mem_admin=markus.${Number(exp) + 3600}.${sig}`]],
+  ['other user, same signature', [`__Host-mem_admin=marie.${exp}.${sig}`]],
+  ['expired', [`__Host-mem_admin=markus.${past}.${mac(`markus.${past}`)}`]],
+  ['validly signed, user removed', [`__Host-mem_admin=hannah.${exp}.${mac(`hannah.${exp}`)}`]],
+  ['old format without user', [`__Host-mem_admin=${exp}.${mac(exp)}`]],
+  ['wrong cookie name', [`mem_admin=markus.${exp}.${sig}`]],
+]) ok((await adminList(cookies)).statusCode === 401, `admin list, ${label}: 401`);
+r = await adminList(['other=1', session]);
+ok(r.statusCode === 200 && JSON.parse(r.body).files.map((f) => f.key).join() === '2026-10-03T19-04-11Z_gast_0a1b2c3d.jpg,2026-10-03T19-04-12Z_x_00000000.png', 'admin list, valid session: 200 with keys');
+
+ok(JSON.parse(r.body).canDelete === false, 'list: markus may not delete');
+
+// Delete: owners only, generated keys only.
+const ownerSession = `__Host-mem_admin=${api.sessionValue('marie')}`;
+const del = (cookies, key) => api.handler({ ...ev('POST', '/admin/api/delete', { key }), cookies });
+ok(JSON.parse((await adminList([ownerSession])).body).canDelete === true, 'list: owner marie may delete');
+const k = '2026-10-03T19-04-11Z_gast_0a1b2c3d.jpg';
+ok((await del(undefined, k)).statusCode === 401 && deleted.length === 0, 'delete without session: 401');
+ok((await del([session], k)).statusCode === 403 && deleted.length === 0, 'delete by non-owner: 403');
+for (const bad of ['../site/index.html', 'x.jpg', '', '2026-10-03T19-04-11Z_gast_0a1b2c3d.jpg/../../y']) {
+  ok((await del([ownerSession], bad)).statusCode === 400, `delete rejects key ${JSON.stringify(bad)}`);
+}
+ok(deleted.length === 0, 'nothing deleted by refused requests');
+r = await del([ownerSession], k);
+ok(r.statusCode === 200 && deleted.join() === `uploads/${k}`, 'owner deletes uploads/<key>');
+ok((await api.handler({ ...ev('GET', '/admin/api/delete'), cookies: [ownerSession] })).statusCode === 404, 'GET delete: 404');
 
 // Signature cross-check against the AWS SDK presigner (same instant, same inputs).
 const creds = { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY, sessionToken: process.env.AWS_SESSION_TOKEN };

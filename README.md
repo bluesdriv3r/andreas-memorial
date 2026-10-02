@@ -2,8 +2,9 @@
 
 A small, private web page for a memorial gathering. Guests scan a QR code, read a short notice
 that their pictures will be shown in a slideshow, and upload photos and short videos from any
-phone or computer browser. There's no app, no account and no gallery. Only the organizer can
-retrieve the files, and then plays them as a slideshow at the gathering.
+phone or computer browser. There's no app and no guest account, and guests see no gallery. Only
+the organizer can view and retrieve the files, in a private gallery or as downloads, and then plays
+them as a slideshow at the gathering.
 
 It runs serverless on AWS (S3, CloudFront, Lambda), is defined entirely in Terraform, and costs
 cents for an event.
@@ -19,7 +20,7 @@ cents for an event.
 > Every photo uploaded here is a small piece of a long friendship. Thank you for all of them,
 > Andreas.
 >
-> *Live long and prosper.* 🖖
+> I'll have a whiskey on you!* 🥃
 >
 > — Chris
 
@@ -44,22 +45,29 @@ the hospital issues donation receipts. This project receives nothing from any do
 
 ## Contents
 
-- [Features](#features)
-- [Similar Projects](#similar-projects)
-- [Architecture](#architecture)
-- [Costs](#costs)
-- [Prerequisites](#prerequisites)
-- [Deploying](#deploying)
-- [Guest Usage](#guest-usage)
-- [Retrieving Uploads](#retrieving-uploads)
-- [Verification and Tests](#verification-and-tests)
-- [Customizing](#customizing)
-- [Security Model](#security-model)
-- [Privacy](#privacy)
-- [Troubleshooting](#troubleshooting)
-- [Tearing Down](#tearing-down)
-- [Known Limitations](#known-limitations)
-- [License and Credits](#license-and-credits)
+- [Andreas' Memorial](#andreas-memorial)
+  - [Dedication](#dedication)
+  - [Donate](#donate)
+  - [Contents](#contents)
+  - [Features](#features)
+  - [Similar Projects](#similar-projects)
+  - [Architecture](#architecture)
+  - [Costs](#costs)
+  - [Prerequisites](#prerequisites)
+    - [AWS Credentials](#aws-credentials)
+  - [Deploying](#deploying)
+    - [Updating a Deployment](#updating-a-deployment)
+    - [Moon Tasks](#moon-tasks)
+  - [Guest Usage](#guest-usage)
+  - [Retrieving Uploads](#retrieving-uploads)
+  - [Verification and Tests](#verification-and-tests)
+  - [Customizing](#customizing)
+  - [Security Model](#security-model)
+  - [Privacy](#privacy)
+  - [Troubleshooting](#troubleshooting)
+  - [Tearing Down](#tearing-down)
+  - [Known Limitations](#known-limitations)
+  - [License and Credits](#license-and-credits)
 
 ## Features
 
@@ -82,8 +90,9 @@ the hospital issues donation receipts. This project receives nothing from any do
 
 **For the organizer:**
 
-- **Admin page** behind HTTP Basic Auth, with a file list and "download all into a folder"
-  (Chrome or Edge on desktop).
+- **Admin area** behind a login, with a username and password for each admin:
+  - a file list with "download all into a folder" (Chrome or Edge on desktop);
+  - a gallery of all uploaded photos, with a slideshow and a link to each original.
 - **`download.sh`:** fetches everything into a local folder and converts HEIC to JPEG with the
   macOS built-in `sips`.
 - **Upload deadline** after which new uploads are refused.
@@ -122,8 +131,9 @@ weddings or parties and include a shared gallery. They are worth a look if that 
 
 **What is different here:**
 
-- **Write-only by design:** there is no gallery and no browsing, which suits a memorial, where
-  the pictures are meant for the gathering and not for the internet.
+- **Write-only for guests:** there is no guest gallery and no browsing, which suits a memorial,
+  where the pictures are meant for the gathering and not for the internet. Only the organizer
+  sees them, in a private gallery.
 - **Serverless and pay-per-use:** there is nothing to host or keep running, and it can be torn
   down after the event.
 - **Resumable multipart uploads** for large phone videos over poor venue Wi-Fi.
@@ -134,7 +144,7 @@ weddings or parties and include a shared gallery. They are worth a look if that 
 ```mermaid
 flowchart LR
     G[Guest browser] -->|GET / · /api/*| CF[CloudFront]
-    A[Organizer browser] -->|/admin/* + Basic Auth| CF
+    A[Organizer browser] -->|/api/login, then /admin/* + session cookie| CF
     CF -->|OAC| SB[(S3 site bucket)]
     CF -->|OAC, SigV4| L[Lambda function URL]
     CF -->|OAC, /admin/files/*| UB[(S3 uploads bucket)]
@@ -149,9 +159,12 @@ flowchart LR
 | `/` and assets | site bucket | none | guest page |
 | `/api/config` | Lambda | none | limits, part size, open or closed |
 | `/api/upload`, `/api/upload/resume`, `/api/upload/complete` | Lambda | none | start, resume and finish multipart uploads |
-| `/admin/` | site bucket | Basic Auth | admin page |
-| `/admin/api/list` | Lambda | Basic Auth | object list |
-| `/admin/files/<key>` | uploads bucket | Basic Auth | download (mapped to `uploads/<key>`) |
+| `/login/index.html` | site bucket | none | admin login page |
+| `/api/login`, `/api/logout` | Lambda | none | set or clear the admin session cookie |
+| `/admin/` | site bucket | session | admin download page |
+| `/admin/gallery/` | site bucket | session | admin gallery and slideshow |
+| `/admin/api/list` | Lambda | session, checked twice | object list |
+| `/admin/files/<key>` | uploads bucket | session | original (mapped to `uploads/<key>`) |
 
 **Repository layout:**
 
@@ -161,15 +174,15 @@ flowchart LR
 | `mkdocs.yml` | Theme and build configuration |
 | `lambda/index.mjs` | The whole API, one file, Node.js 22 |
 | `terraform/` | All infrastructure, plus the admin CloudFront Function (`admin-auth.js`) |
-| `set-password.sh`, `publish.sh`, `verify.sh`, `download.sh` | Admin credential, build and publish, checks, bulk download |
-| `tests/` | Offline tests for the API |
+| `set-password.sh`, `publish.sh`, `verify.sh`, `download.sh` | Admin logins and session key, build and publish, checks, bulk download |
+| `tests/` | Offline tests for the API and the admin CloudFront Function |
 | `moon.yml`, `.moon/` | Optional task runner configuration |
 
 **Design decisions:**
 
-- **MkDocs Material for two pages:** it gives a polished, accessible look with a header, footer
-  and admonitions for free, and builds with plain Python. The interactive part is two small
-  vanilla ES modules. React, npm or a bundler would add a toolchain without adding anything
+- **MkDocs Material for a handful of pages:** it gives a polished, accessible look with a header,
+  footer and admonitions for free, and builds with plain Python. The interactive part is a few
+  small vanilla ES modules. React, npm or a bundler would add a toolchain without adding anything
   functional. npm is only used for the offline tests.
 - **Resumable S3 multipart uploads, not uploads through Lambda:**
   - Lambda caps request payloads at 6 MB, so file bytes never pass through the function.
@@ -195,14 +208,31 @@ flowchart LR
 - **Lambda function URL behind CloudFront OAC:** with `AWS_IAM` auth, the raw function URL answers
   403. Only the distribution can call it. OAC requires an `x-amz-content-sha256` body hash on
   every POST, which the page computes in the browser.
-- **Basic Auth at the edge for the admin area:**
-  - A CloudFront Function checks a SHA-256 digest of the credential. The password itself is never
-    stored anywhere, and the check costs nothing.
-  - Cognito would be heavy for one person, and IAM-gated access would need AWS keys in the
-    browser.
-  - All admin paths live below `/admin/`. Browsers resend a Basic Auth credential only for paths
-    below the one that was authenticated (RFC 7617), so the admin page's own requests carry it
-    without a second prompt.
+- **Password login with a signed session cookie for the admin area:**
+  - The login endpoint `POST /api/login` checks the password against a PBKDF2-SHA256 hash
+    (600,000 iterations). On success it sets `__Host-mem_admin`: the expiry plus an HMAC-SHA256
+    signature over it, `HttpOnly`, `Secure`, `SameSite=Strict`, valid for `session_hours`
+    (default 12).
+  - A CloudFront Function (`terraform/admin-auth.js`) verifies the signature on every `/admin*`
+    request before any origin is reached. The Lambda checks it again for `/admin/api/list`.
+  - Without a valid session, pages and originals redirect to the login page, which returns to the
+    requested URL afterwards. The API answers 401.
+  - **Stateless:** nothing is stored server-side. Logout clears the cookie in that browser;
+    running `set-password.sh` and `terraform apply` rotates the key and ends every session.
+  - **Login URL:** the page is `/login/index.html`. Only `/admin*` paths get directory URLs mapped
+    at the edge; S3 answers `/login/` with 403.
+  - **Alternatives:** Cognito would be heavy for one person, IAM-gated access would need AWS keys
+    in the browser, and Basic Auth can neither show a designed login page nor log out.
+- **Gallery from the originals, no thumbnails:**
+  - The gallery at `/admin/gallery/` reads the same `/admin/api/list` as the download page, so
+    a new upload appears on the next reload. Nothing is copied or indexed.
+  - Tiles show the originals with `loading="lazy"`, so only pictures near the viewport are
+    fetched. Formats the browser cannot draw (HEIC outside Safari, most TIFF, DNG) get a
+    placeholder; their "Original" link still works.
+  - The slideshow is a native `<dialog>` with buttons and arrow keys. There is no gallery
+    library.
+  - **Trade-off:** a phone photo is 2–10 MB, which is fine on Wi-Fi but heavy on mobile data. An
+    S3-triggered resize Lambda writing thumbnails would be the upgrade path.
 - **HEIC is converted at download time:** there is no server-side conversion. iOS Safari often
   hands the page a JPEG anyway, and `download.sh` converts the rest with `sips`, keeping the
   originals.
@@ -248,6 +278,9 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
+With moon, `moon run memorial:setup` does both and also installs the npm dev dependencies for
+the offline tests.
+
 **AWS account:** an identity with administrator rights in the account you deploy to. Everything
 is created in `eu-central-1` (Frankfurt) by default; set `aws_region` to change it before the
 first `apply`.
@@ -290,12 +323,21 @@ selected in the shell. Replace `<admin-profile>` with your own profile name.
 
 **Steps (from the project root):**
 
-1. Set the admin credential. Only a SHA-256 digest is written, to `terraform/auth.auto.tfvars`.
-   Store the password in your password manager, because it cannot be recovered.
+1. Create the admin logins, one per person. The script stores a PBKDF2 hash of each password
+   and a random session key in `terraform/auth.auto.tfvars.json`; it needs `node` and
+   `openssl`. With `--generate` it creates a password and prints it once, for you to send to
+   that person privately. Passwords cannot be recovered.
 
    ```zsh
-   ./set-password.sh
+   ./set-password.sh markus --generate
    ```
+
+   - **Own password instead:** `./set-password.sh <username>` prompts for it.
+   - **Owner (may delete photos):** add `--owner`, for example
+     `./set-password.sh chris --generate --owner`. Other admins can view and download only.
+   - **Remove a login:** `./set-password.sh --remove <username>`; after `apply`, that person's
+     sessions end too.
+   - **Sign everyone out:** `./set-password.sh --rotate-key`.
 
 2. Create your settings from the example. `terraform.tfvars` is git-ignored, so names and dates
    stay out of the repository.
@@ -348,14 +390,15 @@ selected in the shell. Replace `<admin-profile>` with your own profile name.
    ./publish.sh
    ```
 
-7. Verify. With the credential, this also makes one real multipart upload and removes it again.
-   It includes a part of the wrong length, which S3 must refuse.
+7. Verify. With the admin password, this also logs in, makes one real multipart upload, removes
+   it again and logs out. It includes a part of the wrong length, which S3 must refuse.
 
    ```zsh
-   MEMORIAL_CREDENTIAL='<user>:<password>' ./verify.sh
+   MEMORIAL_USER='<username>' MEMORIAL_PASSWORD='<password>' ./verify.sh
    ```
 
-   Use the username and password from `set-password.sh`, not your AWS credentials.
+   Use a login from `set-password.sh`, not your AWS credentials. Without the variables, the
+   script prompts for them in a terminal.
 
 8. Open the page on a phone, tap the QR button, and scan the code from a second phone. Print
    the same `qr.png` for cards or a sign at the venue.
@@ -366,20 +409,86 @@ selected in the shell. Replace `<admin-profile>` with your own profile name.
 terraform -chdir=terraform output -raw site_url
 ```
 
-**Changing settings later:**
+### Updating a Deployment
 
-- **Deadline:** edit `terraform.tfvars` and run `terraform apply`. No publish is needed.
-- **Title or footer:** edit `terraform.tfvars`, run `terraform apply`, then run `./publish.sh`.
-  Both are baked into the pages at build time.
-- **Page texts, portrait, QR code:** edit the files and run `./publish.sh`.
+There are two update commands: `terraform apply` changes the infrastructure and the Lambda code,
+and `./publish.sh` rebuilds the pages and uploads them. Both need a valid AWS session (see
+[AWS Credentials](#aws-credentials)) and can be run as often as needed. The
+[moon tasks](#moon-tasks) cover every step.
 
-**Moon tasks (optional):**
+**What to run:**
+
+| What changed | Run |
+| --- | --- |
+| Page texts, styles or scripts in `web/`, `mkdocs.yml`, portrait, QR code | `./publish.sh` |
+| API code (`lambda/index.mjs`), admin gate (`terraform/admin-auth.js`), other `terraform/` files | `terraform apply` |
+| Deadline or limits in `terraform.tfvars` | `terraform apply` |
+| Title or footer in `terraform.tfvars` | `terraform apply`, then `./publish.sh`; both are baked into the pages at build time |
+| Admin logins (add, change, remove), or signing everyone out | `./set-password.sh …`, then `terraform apply` |
+| A new version of this repository | All steps below |
+
+**Steps for a new version (from the project root):**
+
+1. Get the new version.
+
+   ```zsh
+   git pull
+   ```
+
+2. Update the tools if `requirements.txt` or `package.json` changed, and run the offline tests.
+   With moon: `moon run memorial:setup`, then `moon run memorial:test`.
+
+   ```zsh
+   .venv/bin/pip install -r requirements.txt
+   ```
+
+   ```zsh
+   npm install && npm test
+   ```
+
+3. Review the infrastructure changes. If the plan asks for a variable that has no value, add it:
+   a missing `admin_users` or `session_key` means running `./set-password.sh <username>` first.
+
+   ```zsh
+   terraform -chdir=terraform plan
+   ```
+
+4. Apply. A changed CloudFront Function or distribution takes a few minutes to reach every edge
+   location.
+
+   ```zsh
+   terraform -chdir=terraform apply
+   ```
+
+5. Publish the pages. Run this after `apply`: new pages may depend on new API routes or on the
+   new admin gate.
+
+   ```zsh
+   ./publish.sh
+   ```
+
+6. Verify, as in step 7 of the first deployment.
+
+   ```zsh
+   MEMORIAL_USER='<username>' MEMORIAL_PASSWORD='<password>' ./verify.sh
+   ```
+
+**Upgrading from an older version:** the admin area now has one login per person. Run
+`./set-password.sh <username>` for each admin before step 3. It replaces the old Basic Auth
+credential or the single-password file `auth.auto.tfvars`, which the script removes.
+
+### Moon Tasks
+
+Moon is optional. Each task runs a plain command or script:
 
 | Task | Equivalent |
 | --- | --- |
+| `moon run memorial:setup` | Python venv with `requirements.txt`, then `npm install`. Safe to re-run. |
+| `moon run memorial:set-password -- <username> [--generate]` | `./set-password.sh <username> [--generate]` (interactive) |
 | `moon run memorial:build` | `.venv/bin/mkdocs build --clean --strict` |
 | `moon run memorial:serve` | Local preview on `http://127.0.0.1:8001`. There is no API locally, so the page reports the service as unreachable. |
-| `moon run memorial:infra-plan` | `terraform -chdir=terraform plan`. There is deliberately no apply task. |
+| `moon run memorial:infra-plan` | `terraform -chdir=terraform plan` |
+| `moon run memorial:infra-apply` | `terraform -chdir=terraform apply` (interactive). It shows the plan and applies only after you type `yes`; there is no `-auto-approve`. |
 | `moon run memorial:publish` | `./publish.sh` |
 | `moon run memorial:verify` | `./verify.sh` |
 | `moon run memorial:download -- <folder>` | `./download.sh <folder>` |
@@ -413,13 +522,34 @@ terraform -chdir=terraform output -raw site_url
 - **Result:** point your slideshow tool at the folder. File names start with the upload time in
   UTC, so they sort chronologically.
 
-**Admin page** (`<site_url>/admin/`, which prompts for the credential):
+**Signing in:** use the "Management" link at the right of the guest page's footer bar, which
+opens the gallery, or open `<site_url>/admin/gallery/` or `<site_url>/admin/` directly. Without
+a session, the login page asks for username and password and returns there afterwards; the
+gallery is the default. The header bar of both admin pages
+links to the other page and has "Log out".
+
+**Admin page** (`<site_url>/admin/`):
 
 - **Contents:** file count, total size, and a download link for each file.
 - **"Alle in einen Ordner herunterladen":** saves everything into a folder you choose and skips
   files already there. It needs the File System Access API, which means Chrome or Edge on a
   desktop. Other browsers get the per-file links.
 - **HEIC:** files saved from the page are not converted. The page shows the `sips` one-liner.
+
+**Gallery** (`<site_url>/admin/gallery/`):
+
+- **Contents:** every uploaded photo, newest first, in rows that fill the screen width. Each
+  preview keeps its photo's shape, so landscape photos stay landscape. A caption bar shows the
+  uploader's name. Videos stay on the admin page; the count is shown at the top.
+- **"Open":** opens the photo on its own page in a new tab (`/admin/photo/`), still behind the
+  login. Below the photo it shows the uploader's name as typed (from the upload's metadata) and
+  the upload date, plus "Download" for the original. Formats the browser cannot display (HEIC
+  outside Safari, DNG) show a placeholder there.
+- **Delete (owners only):** the trash icon in a photo's caption bar deletes it after a
+  confirmation. Deleting is permanent; the bucket keeps no old versions. Download first if in
+  doubt.
+- **Slideshow:** click a picture to start there. The buttons or ← and → step through all photos
+  and wrap around at either end; Esc or ✕ closes it.
 
 ## Verification and Tests
 
@@ -435,18 +565,24 @@ npm test
 
 The API runs against an in-memory S3 mock. The checks cover the limits, file types, key format,
 resume and complete logic, the upload deadline and its grace period, input validation, and a
-signature cross-check against the AWS SDK presigner. The access keys used there are AWS's
+signature cross-check against the AWS SDK presigner. For the admin side they cover login, logout,
+cookie flags, `next` sanitizing, and forged, tampered and expired sessions. The CloudFront
+Function runs offline too, with a cookie signed by the Lambda, so both sides must agree on the
+format. The access keys used there are AWS's
 documented example keys, not real credentials.
 
 **After deploying (`./verify.sh`):**
 
 - **Guest side:** the page and API answer, uploads are open, and oversized, non-media and forged
   requests are refused. The page references no Google Fonts.
-- **Admin area:** every admin path returns 401 without a credential or with a wrong one.
+- **Admin area:** without a session, every admin page and original redirects to the login page
+  and the list answers 401. The same happens with a forged cookie or an old Basic Auth header,
+  and a wrong password is refused.
 - **Isolation:** neither bucket nor the raw Lambda URL is reachable directly, HTTP redirects to
   HTTPS, and the security headers are present.
-- **With a credential:** the admin page and list load, and a real multipart upload goes through
-  end to end. A part of the wrong length is refused.
+- **With the password:** login works and its duration is printed. The admin page, gallery and
+  list load, and a real multipart upload goes through end to end and can be fetched as an
+  original. A part of the wrong length is refused. After logout the admin area is closed again.
 
 **Manual, before the event:**
 
@@ -472,8 +608,8 @@ documented example keys, not real credentials.
 
 **Changing the language:** translate the three text sources above (`web/index.md`,
 `upload.js`, `lambda/index.mjs`) and set `theme.language` in `mkdocs.yml`, which controls
-Material's own labels. The admin page texts are in `web/admin/index.md` and
-`web/javascripts/admin.js`.
+Material's own labels. The admin texts are in `web/login.md`, `web/admin/index.md`,
+`web/admin/gallery.md` and their scripts `login.js`, `admin.js` and `gallery.js`.
 
 ## Security Model
 
@@ -481,8 +617,12 @@ Material's own labels. The admin page texts are in `web/admin/index.md` and
 
 - Guests can only start, continue and complete their own uploads. S3 keys are generated by the
   server, and resuming or completing requires the matching, unguessable multipart `uploadId`.
-- They cannot list, read, overwrite or delete anything. The Lambda role has no `GetObject` or
-  `DeleteObject`, and neither bucket is public.
+- They cannot list, read, overwrite or delete anything. Neither bucket is public, and the Lambda
+  role has no `GetObject`. It has `DeleteObject` on `uploads/*` for owners, but a guest's
+  presigned part URL signs its method and key, so it cannot be turned into a delete.
+- Only admins marked as owners can delete, through `POST /admin/api/delete`. The Lambda checks
+  the owner list itself; the page only hides the buttons. Each delete is logged with the
+  username and key.
 
 **How the limits hold:**
 
@@ -492,21 +632,41 @@ Material's own labels. The admin page texts are in `web/admin/index.md` and
 
 **The admin area:**
 
-- Basic Auth over HTTPS, checked at the edge before any request reaches an origin. It is only as
-  strong as the password: `set-password.sh` requires 12 or more characters, and a generated one
-  is recommended (`openssl rand -base64 24`).
+- **Enforced at the edge:** a username and password login over HTTPS, with the session checked
+  by the CloudFront Function before any admin request reaches an origin, and again by the Lambda
+  for the file list. Hiding the pages from the navigation is not part of the protection.
+- **Named admins, all equal:** every configured login is an administrator; there are no other
+  roles and no client-side flags to forge. The session cookie carries the username, signed
+  with the session key; the CloudFront Function and the Lambda accept it only while that user
+  is still configured. Successful logins are logged with the username.
+- **No password links:** an admin cannot set their own password through the site; that would
+  need a writable store such as DynamoDB. The organizer generates and sends the passwords.
+- **Password strength:** the login is only as strong as the password. `set-password.sh` requires
+  12 or more characters, and a generated one is recommended (`openssl rand -base64 24`). Each
+  attempt costs a PBKDF2 hash with 600,000 iterations.
+- **Originals stay private:** the uploads bucket is never public and is read only by CloudFront
+  (OAC) after the session check. There are no presigned or permanent public URLs, so opening an
+  original in a new tab goes through the same check.
+- **Session lifetime:** a stolen cookie stays valid until it expires (`session_hours`). Remove
+  that user (`--remove`) or rotate the key (`--rotate-key`) and `terraform apply` to end it.
+- **Where the secrets live:** the hashes and the session key are sensitive Terraform variables
+  in the git-ignored `auth.auto.tfvars.json`. They reach the Lambda environment, the CloudFront
+  Function code and the Terraform state, so anyone allowed to read those can read them. The
+  built site contains neither.
 
 **Headers and data:**
 
 - A strict response-headers policy: CSP, HSTS, `nosniff`, a referrer policy and frame options.
   `'unsafe-inline'` is needed for Material's inline scripts.
-- Nothing personal is in the repository: the credential digest, names, deadline, portrait and QR
-  code are all git-ignored.
+- Nothing personal is in the repository: the password hash, session key, names, deadline,
+  portrait and QR code are all git-ignored.
 
 **Not included:**
 
 - There is no per-IP rate limiting. Abuse is bounded by the deadline, the per-request file cap
   and the size limits, so share the QR code only with guests.
+- The admin login has no lockout either. Guessing is slowed only by PBKDF2, so the password's
+  strength is what counts.
 - AWS WAF with a rate-based rule is the proper addition if you need rate limiting. At the time
   of writing it cost about $5 per web ACL per month plus $1 per rule, prorated hourly.
 
@@ -540,9 +700,15 @@ to your event.
   `/aws/lambda/<name_prefix>-api`. A 403 from CloudFront right after `apply` usually means the
   Lambda permissions or OAC have not propagated yet; wait a minute and re-run.
 - **`publish.sh` fails with "uploads are closed":** `upload_deadline` is in the past or mistyped.
-  Fix it in `terraform.tfvars` and `apply`.
-- **`verify.sh` fails the admin checks:** `MEMORIAL_CREDENTIAL` must be the Basic Auth
-  `user:password` from `set-password.sh`. After changing the password, run `terraform apply`.
+  Fix it in `terraform.tfvars` and `apply`. After the event this is expected: the check runs
+  last, so the pages were already uploaded and the cache invalidated.
+- **`verify.sh` fails the admin checks:** `MEMORIAL_USER` and `MEMORIAL_PASSWORD` must be a
+  login from `set-password.sh`. After changing logins, run `terraform apply`.
+- **`terraform plan` asks for `admin_users`, or warns about `admin_password_hash` or
+  `credential_sha256`:** the login file predates per-user logins. Run
+  `./set-password.sh <username>`, then `apply`.
+- **Login answers "Anmelden ist gerade nicht möglich":** the Lambda has no logins or no session
+  key. Run `./set-password.sh <username>` and `terraform apply`.
 - **Guests see "Upload abgelaufen":** the unfinished upload was cleaned up (after a day) or
   aborted. "Nochmal versuchen" starts that file again.
 - **No portrait, or "QR-Code kommt noch":** the image was missing in `web/images/` at publish
@@ -573,10 +739,18 @@ Until then, the only ongoing cost is S3 storage for the uploads.
   reload needs the same file to be picked again in the same browser.
 - **No rate limiting:** see [Security Model](#security-model).
 - **No content check:** the extension and `Content-Type` are checked, but not the file's bytes.
-  Files are served for download only, with `nosniff`, so a disguised file cannot run in the
-  browser.
+  Originals are served with that server-set image or video `Content-Type` and `nosniff`, and the
+  allowlist has no HTML or SVG, so a disguised file cannot run in the browser.
 - **No video transcoding:** check that your slideshow tool plays iPhone HEVC `.mov` files.
-- **No thumbnails on the admin page.**
+- **No thumbnails:** the gallery loads the originals, lazily. Browsing many photos on mobile
+  data is heavy. See the design decisions.
+- **Stateless admin sessions:** logout ends the session in that browser only. Other copies of
+  the cookie stay valid until they expire or the key is rotated.
+- **Originals in the browser cache:** S3 sends no `Cache-Control`, so the browser may keep viewed
+  photos in its cache after logout. Use a private browser window on a shared computer. Sending
+  `no-store` instead would re-download every original on each slideshow step.
+- **Logout is a plain link:** another site could log the admin out. That is a nuisance, not a
+  leak.
 - **One admin identity:** publishing uses your admin profile. There is no dedicated deploy
   IAM user.
 - **Local preview has no API:** `moon run memorial:serve` shows the layout only.
@@ -593,6 +767,3 @@ Until then, the only ongoing cost is S3 storage for the uploads.
   [Material Design Icons](https://pictogrammers.com/library/mdi/).
 - **Third-party notices:** all third-party components and their licenses are listed in
   [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-
-*"Live long and prosper"* is Spock's greeting from *Star Trek*. It is quoted here as a personal
-tribute, and this project has no affiliation with the franchise.

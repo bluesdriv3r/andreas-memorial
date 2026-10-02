@@ -38,6 +38,10 @@ hide:
   <ul id="mu-list" class="mu-list"></ul>
 </div>
 
+<!-- upload.js moves this link into the footer bar. The admin area is protected by its
+     login, not by hiding this link. -->
+[Management](admin/gallery/){ #mu-management .mu-footer-link }
+
 <dialog id="mu-qr" class="mu-qr" aria-labelledby="mu-qr-title">
   <p id="mu-qr-title" class="mu-qr-title">Seite weitergeben</p>
   <p class="mu-limits">Einfach mit der Handykamera scannen – ganz ohne Anmeldung.</p>

@@ -47,14 +47,21 @@ if [[ ! -f site/images/qr.png ]]; then
 fi
 
 # Guard the --delete below: never sync a half-built directory.
-[[ -f site/index.html && -f site/admin/index.html && -f site/stylesheets/colors.css ]] \
+[[ -f site/index.html && -f site/admin/index.html && -f site/admin/gallery/index.html \
+    && -f site/admin/photo/index.html \
+    && -f site/login/index.html && -f site/stylesheets/colors.css ]] \
     || die "Build output incomplete — refusing to sync with --delete."
 
 export AWS_RETRY_MODE=standard
 export AWS_MAX_ATTEMPTS=10
 
-printf '==> Syncing to s3://%s\n' "$bucket"
-aws s3 sync "$project_dir/site/" "s3://$bucket/" --delete
+# Cache-Control no-cache: browsers check for a newer version on every visit (a cheap
+# 304 when nothing changed), so a publish is visible at once. cp uploads everything,
+# because sync would not update the header of unchanged files; sync then deletes what
+# the build no longer contains.
+printf '==> Uploading to s3://%s\n' "$bucket"
+aws s3 cp "$project_dir/site/" "s3://$bucket/" --recursive --cache-control no-cache --only-show-errors
+aws s3 sync "$project_dir/site/" "s3://$bucket/" --delete --cache-control no-cache --only-show-errors
 
 # '/*' counts as one invalidation path, well inside the free 1000/month.
 printf '==> Invalidating the CloudFront cache\n'

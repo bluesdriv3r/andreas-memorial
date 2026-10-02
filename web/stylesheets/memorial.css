@@ -14,6 +14,8 @@
 }
 
 .md-main .md-content__inner:has(.mu-table) { max-width: 56rem; }
+.md-main .md-content__inner:has(.mu-gallery) { max-width: 72rem; }
+.md-main .md-content__inner:has(.mu-photo) { max-width: 72rem; }
 
 .md-typeset h1 { text-align: center; }
 
@@ -318,3 +320,342 @@
 
 .md-typeset .mu-qr form { margin: 0; }
 .md-typeset .mu-qr .mu-button { width: 100%; }
+
+/* --- Login and admin navigation ------------------------------------------------ */
+
+/* A narrow centered column keeps the login form short and focused. */
+.md-typeset .mu-auth {
+  max-width: 22rem;
+  margin: 2rem auto;
+}
+
+.md-typeset .mu-lede {
+  text-align: center;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Admin navigation in the header bar (moved there by admin-files.js): icon plus label,
+   in the header's own colors. Phones show the icons only. */
+.md-typeset .mu-header-links { display: none; }
+
+.mu-header-links p {
+  display: flex;
+  gap: .2rem;
+  margin: 0 .4rem 0 0;
+}
+
+.mu-header-links a {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .4rem .5rem;
+  font-size: .7rem;
+  font-weight: 700;
+  color: var(--md-primary-bg-color);
+  white-space: nowrap;
+  border-radius: .2rem;
+  transition: opacity 125ms;
+}
+
+.mu-header-links a:hover { opacity: .7; }
+
+.mu-header-links a:focus-visible {
+  outline: 2px solid var(--md-primary-bg-color);
+  outline-offset: -2px;
+}
+
+.mu-header-links .twemoji,
+.mu-header-links svg {
+  display: block;
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: currentColor;
+}
+
+@media screen and (max-width: 44.9375em) {
+  .mu-header-links a span:not(.twemoji) { display: none; }
+}
+
+/* Link to the admin area in the footer bar (moved there by upload.js): on the
+   copyright's line, at the right-hand end, in the footer's colors. Three columns keep
+   the copyright centered: an empty one on the left balances the link on the right.
+   The link's column never gets narrower than the link, so it stays on one line. */
+.md-content #mu-management { display: none; }
+
+.md-footer-meta__inner:has(.mu-footer-link) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(max-content, 1fr);
+  align-items: center;
+}
+
+.md-footer-meta__inner:has(.mu-footer-link) .md-copyright {
+  grid-column: 2;
+  width: auto;
+}
+
+.md-footer-meta__inner .mu-footer-link {
+  grid-column: 3;
+  justify-self: end;
+  margin: 0 .6rem;
+  white-space: nowrap;
+  font-size: .64rem;
+  color: var(--md-footer-fg-color--lighter);
+  transition: color 125ms;
+}
+
+.md-footer-meta__inner .mu-footer-link:hover,
+.md-footer-meta__inner .mu-footer-link:focus-visible { color: var(--md-footer-fg-color); }
+
+/* --- Admin gallery ----------------------------------------------------------------
+   Rows that fill the width, every photo in its own shape: each tile grows in
+   proportion to its aspect ratio (--ar, set by gallery.js once the image is known;
+   4:3 until then). Tiles about 10rem high; a narrow screen fits fewer per row. */
+
+/* ul.: outranks Material's `ul:not([hidden]) { display: flow-root }`. */
+.md-typeset ul.mu-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin: 0 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+/* Keeps the last row from stretching its few tiles across the whole width. */
+.md-typeset ul.mu-gallery::after {
+  content: "";
+  flex-grow: 1000;
+}
+
+/* ul.… > li: outranks Material's `[dir=ltr] .md-typeset ul li` margin. */
+.md-typeset ul.mu-gallery > li {
+  --ar: 1.333;
+  display: flex;
+  flex: var(--ar) 1 calc(var(--ar) * min(10rem, 30vw));
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border-radius: .2rem;
+  box-shadow: var(--md-shadow-z1);
+}
+
+.md-typeset .mu-tile__open {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--ar);
+  padding: 0;
+  overflow: hidden;
+  background: var(--md-default-fg-color--lightest);
+  border: 0;
+  cursor: zoom-in;
+}
+
+.md-typeset .mu-tile__open:focus-visible {
+  outline: 2px solid var(--mem-link);
+  outline-offset: -2px;
+}
+
+.md-typeset .mu-tile__open img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.md-typeset .mu-tile__none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: .7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Caption bar in the header's colors: uploader on the left, Open on the right. */
+.md-typeset .mu-tile__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem;
+  padding: .25rem .3rem .25rem .5rem;
+  font-size: .65rem;
+  color: var(--md-primary-bg-color);
+  background: var(--md-primary-fg-color);
+}
+
+.md-typeset .mu-tile__meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-typeset .mu-tile__meta a,
+.md-typeset .mu-slideshow__bar a {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: .2rem;
+  padding: .15rem .3rem;
+  font-weight: 700;
+  color: inherit;
+  border-radius: .2rem;
+  transition: opacity 125ms;
+}
+
+/* One photo (/admin/photo/): the whole picture within the window, with the gallery's
+   caption bar (uploader, date, Download) attached below it. */
+.md-typeset .mu-photo {
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 2rem;
+  overflow: hidden;
+  border-radius: .2rem;
+  box-shadow: var(--md-shadow-z1);
+}
+
+/* Material's figure rule sets display, which would otherwise beat the attribute. */
+.md-typeset .mu-photo[hidden],
+.md-typeset .mu-photo [hidden] { display: none; }
+
+.md-typeset .mu-photo img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 14rem);
+  object-fit: contain;
+}
+
+.md-typeset .mu-photo .mu-tile__none {
+  min-width: min(30rem, 80vw);
+  min-height: 12rem;
+  margin: 0;
+}
+
+/* Material styles figcaption as a narrow italic note; here it is the caption bar. It
+   takes the photo's width without widening the card (width 0, min-width 100%), and
+   wraps instead of cutting the date off. */
+.md-typeset .mu-photo .mu-tile__meta {
+  width: 0;
+  min-width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: .4rem .5rem .4rem .7rem;
+  font-size: .75rem;
+  font-style: normal;
+  text-align: left;
+}
+
+.md-typeset .mu-photo .mu-tile__meta span {
+  white-space: normal;
+}
+
+/* Owners only: delete, after Open in the caption bar. */
+.md-typeset .mu-tile__delete {
+  display: flex;
+  flex: none;
+  padding: .15rem;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: .2rem;
+  cursor: pointer;
+  transition: opacity 125ms;
+}
+
+.md-typeset .mu-tile__delete:hover { opacity: .7; }
+.md-typeset .mu-tile__delete:disabled { opacity: .4; cursor: wait; }
+
+.md-typeset .mu-tile__delete svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: currentColor;
+}
+
+.md-typeset .mu-tile__meta span { flex: 1; }
+
+.md-typeset .mu-tile__meta a:hover,
+.md-typeset .mu-slideshow__bar a:hover { opacity: .7; }
+
+.md-typeset .mu-tile__meta svg,
+.md-typeset .mu-slideshow__bar svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+/* Slideshow: the whole viewport, black whatever the theme, like a photo viewer. */
+.md-typeset .mu-slideshow {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  color: #fff;
+  background: #000;
+  border: 0;
+}
+
+.md-typeset .mu-slideshow[open] {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.md-typeset .mu-slideshow [hidden] { display: none !important; }
+
+.md-typeset .mu-slideshow img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.md-typeset .mu-slide-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+}
+
+.md-typeset .mu-slideshow__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  padding: .4rem .8rem calc(.4rem + env(safe-area-inset-bottom));
+  color: var(--md-primary-bg-color);
+  background: var(--md-primary-fg-color);
+}
+
+.md-typeset .mu-slideshow__bar button {
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  font: inherit;
+  font-size: 1.1rem;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: .2rem;
+  cursor: pointer;
+  transition: opacity 125ms;
+}
+
+.md-typeset .mu-slideshow__bar button:hover { opacity: .7; }
+
+.md-typeset .mu-slideshow__bar button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.md-typeset #mu-counter {
+  min-width: 4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+body:has(.mu-slideshow[open]) { overflow: hidden; }

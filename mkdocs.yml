@@ -58,9 +58,13 @@ plugins: []
 nav:
   - index.md
 
-# The admin page is reached by URL only; guests get no link to it.
+# Reached by URL only; guests get no link to them. Not a protection — the admin
+# pages are guarded by the session gate at the edge (terraform/admin-auth.js).
 not_in_nav: |
   /admin/index.md
+  /admin/gallery.md
+  /admin/photo.md
+  /login.md
 
 markdown_extensions:
   - admonition

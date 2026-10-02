@@ -8,6 +8,12 @@ hide:
 
 # Uploads herunterladen
 
+<!-- admin-files.js moves these links into the header bar. -->
+<div class="mu-header-links" markdown>
+[:material-image-multiple: <span>Gallery</span>](gallery/){ title="Gallery" }
+[:material-logout: <span>Log out</span>](/api/logout){ title="Log out" }
+</div>
+
 <div class="mu-form mu-form--wide">
   <p id="mu-summary" class="mu-limits">Liste wird geladen …</p>
   <button type="button" id="mu-download-all" class="mu-button" hidden>Alle in einen Ordner herunterladen</button>
